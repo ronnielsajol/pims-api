@@ -1,0 +1,28 @@
+{
+	"name": "pims",
+	"version": "0.0.0",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"start": "node app.js",
+		"dev": "nodemon app.js"
+	},
+	"dependencies": {
+		"appwrite": "^17.0.1",
+		"cookie-parser": "~1.4.4",
+		"debug": "~2.6.9",
+		"dotenv": "^16.4.7",
+		"drizzle-orm": "^0.41.0",
+		"express": "~4.16.1",
+		"morgan": "~1.9.1",
+		"pg": "^8.14.1"
+	},
+	"devDependencies": {
+		"@eslint/js": "^9.23.0",
+		"@types/pg": "^8.11.11",
+		"drizzle-kit": "^0.30.5",
+		"eslint": "^9.23.0",
+		"globals": "^16.0.0",
+		"nodemon": "^3.1.9"
+	}
+}
