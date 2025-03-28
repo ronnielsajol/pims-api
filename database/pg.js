@@ -14,7 +14,7 @@ const pool = new Pool({
 
 export const db = drizzle(pool);
 
-const checkDBConnection = async () => {
+export const checkDBConnection = async () => {
 	try {
 		const client = await pool.connect();
 		console.log("✅ Database connected successfully");
@@ -25,4 +25,4 @@ const checkDBConnection = async () => {
 	}
 };
 
-export default checkDBConnection;
+export { pool };
