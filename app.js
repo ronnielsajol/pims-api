@@ -4,7 +4,7 @@ import { PORT } from "./config/env.js";
 import userRouter from "./routes/user.routes.js";
 import authRouter from "./routes/auth.routes.js";
 import propertiesRouter from "./routes/properties.routes.js";
-import { checkDBConnection } from "./database/pg.js";
+import { checkDBConnection } from "./database/supabase.js";
 import errorMiddleware from "./middleware/error.middleware.js";
 import cookieParser from "cookie-parser";
 
