@@ -21,7 +21,7 @@ app.use("/api/v1/properties", propertiesRouter);
 app.use(errorMiddleware);
 
 app.get("/", (req, res) => {
-	res.send("Welcome!");
+	res.send({ message: "Welcome to PIMS API" });
 });
 
 app.listen(PORT, async () => {

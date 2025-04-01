@@ -1,5 +1,5 @@
 import { db } from "../database/supabase.js";
-import { users } from "../models/users.model.js";
+import { Users } from "../models/users.model.js";
 import { JWT_EXPIRES_IN, JWT_SECRET } from "../config/env.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -10,7 +10,7 @@ export const signUp = async (req, res, next) => {
 		const { name, email, password } = req.body;
 
 		// Check if the user already exists
-		const existingUser = await db.select().from(users).where(eq(users.email, email));
+		const existingUser = await db.select().from(Users).where(eq(Users.email, email));
 		if (existingUser.length > 0) {
 			return res.status(409).json({ success: false, message: "User already exists" });
 		}
@@ -19,7 +19,7 @@ export const signUp = async (req, res, next) => {
 		const hashedPassword = await bcrypt.hash(password, 10);
 
 		// Insert new user and return the inserted row
-		const [newUser] = await db.insert(users).values({ name, email, password: hashedPassword }).returning();
+		const [newUser] = await db.insert(Users).values({ name, email, password: hashedPassword }).returning();
 
 		// Generate JWT token
 		const token = jwt.sign({ userId: newUser.id }, JWT_SECRET, {
@@ -41,7 +41,7 @@ export const signIn = async (req, res, next) => {
 		const { email, password } = req.body;
 
 		// Check if user exists
-		const existingUser = await db.select().from(users).where(eq(users.email, email));
+		const existingUser = await db.select().from(Users).where(eq(Users.email, email));
 		if (existingUser.length === 0) {
 			return res.status(404).json({ success: false, message: "User not found" });
 		}
