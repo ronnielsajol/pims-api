@@ -55,14 +55,14 @@ export const signIn = async (req, res, next) => {
 		}
 
 		// Generate JWT token
-		const token = jwt.sign({ userId: user.id }, JWT_SECRET, {
+		const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, {
 			expiresIn: JWT_EXPIRES_IN,
 		});
 
 		res.status(200).json({
 			success: true,
 			message: "Login successful",
-			data: { token, user: { id: user.id, name: user.name, email: user.email } },
+			data: { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } },
 		});
 	} catch (error) {
 		next(error);
