@@ -13,20 +13,24 @@ const authorize = async (req, res, next) => {
 		}
 
 		if (!token) {
-			return res.status(401).json({ message: "Unauthorized" });
+			return res.status(401).json({ message: "Unauthorized: No token provided" });
 		}
 
 		const decoded = jwt.verify(token, JWT_SECRET);
-
+		if (!decoded || !decoded.userId) {
+			return res.status(401).json({ message: "Unauthorized: Invalid token" });
+		}
 		const user = await db.select().from(Users).where(eq(Users.id, decoded.userId)).limit(1);
-		if (!user) {
-			return res.status(401).json({ message: "Unauthorized" });
+		if (!user.length) {
+			return res.status(401).json({ message: "Unauthorized: User not found" });
 		}
 
-		req.user = user[0]; // Attach user to request object
+		req.user = user[0];
 
 		next();
 	} catch (error) {
+		console.error("Authentication error:", error.message);
+
 		res.status(401).json({ message: "Unauthorized", error: error.message });
 	}
 };

@@ -34,3 +34,13 @@ export const getUserById = async (req, res, next) => {
 		next(error);
 	}
 };
+
+export const getAdmins = async (req, res, next) => {
+	try {
+		const admins = await db.select().from(Users).where(eq(Users.role, "admin")); // Adjust based on your role column type
+
+		res.status(200).json({ success: true, admins });
+	} catch (error) {
+		next(error);
+	}
+};

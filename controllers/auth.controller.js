@@ -36,6 +36,41 @@ export const signUp = async (req, res, next) => {
 	}
 };
 
+export const adminSignUp = async (req, res, next) => {
+	try {
+		const { name, email, password, role } = req.body;
+
+		if (!role) {
+			const error = new Error("Unauthorized: This is for admin access only");
+			error.status = 401;
+			throw error;
+		}
+
+		const existingUser = await db.select().from(Users).where(eq(Users.email, email));
+
+		if (existingUser.length > 0) {
+			return res.status(409).json({ success: false, message: "User already exists" });
+		}
+
+		const salt = await bcrypt.genSalt(10);
+		const hashedPassword = await bcrypt.hash(password, salt);
+
+		const [newUser] = await db.insert(Users).values({ name, email, password: hashedPassword, role }).returning();
+
+		const token = jwt.sign({ userId: newUser.id, role }, JWT_SECRET, {
+			expiresIn: JWT_EXPIRES_IN,
+		});
+
+		res.status(201).json({
+			success: true,
+			message: "Admin registered successfully",
+			data: { token, user: newUser },
+		});
+	} catch (error) {
+		next(error);
+	}
+};
+
 export const signIn = async (req, res, next) => {
 	try {
 		const { email, password } = req.body;
