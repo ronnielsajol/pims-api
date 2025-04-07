@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
 	addProperty,
 	assignPropertyToStaff,
+	deleteProperty,
 	getAllProperties,
 	getAssignedProperties,
 	updateProperty,
@@ -15,6 +16,8 @@ propertiesRouter.get("/all", authorize, checkRole(["admin", "master_admin"]), ge
 propertiesRouter.post("/add", authorize, checkRole(["admin", "master_admin"]), addProperty);
 propertiesRouter.post("/assign", authorize, checkRole(["admin", "master_admin"]), assignPropertyToStaff);
 propertiesRouter.patch("/update/:id", authorize, checkRole(["admin", "master_admin"]), updateProperty);
+
+propertiesRouter.delete("/:id", authorize, checkRole(["admin", "master_admin"]), deleteProperty);
 
 propertiesRouter.get("/:userId", authorize, checkRole(["admin", "master_admin"]), getAssignedProperties);
 
