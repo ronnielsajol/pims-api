@@ -64,3 +64,4 @@ typings/
 migrations/
 .vercel
 .env*.local
+ronniel_s.pem
