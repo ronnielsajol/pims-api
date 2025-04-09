@@ -39,7 +39,7 @@ export const addProperty = async (req, res, next) => {
 			qrCode = await generateQrCode(newProperty.id);
 		} catch (error) {
 			console.error("QR Code generation failed:", error);
-			return res.json({ error: "Failed to generate QR code" }, { status: 500 });
+			res.status(500).json({ error: "Failed to generate QR cod " });
 		}
 
 		const [updateQr] = await db
