@@ -37,9 +37,12 @@ export const addProperty = async (req, res, next) => {
 		let qrCode;
 		try {
 			qrCode = await generateQrCode(newProperty.id);
+			if (!qrCode || !qrCode.url) {
+				return res.status(500).json({ message: "QR code generation failed" });
+			}
 		} catch (error) {
 			console.error("QR Code generation failed:", error);
-			res.status(500).json({ message: "Failed to generate QR code ", error: error.message });
+			return res.status(500).json({ message: "Failed to generate QR code", error: error.message });
 		}
 
 		const [updateQr] = await db
@@ -229,7 +232,7 @@ export const deleteProperty = async (req, res) => {
 		await db.delete(Accountable).where(eq(Accountable.propertyId, Number(id)));
 
 		// Now delete the property itself
-		deleteQrCode(existingProperty.qrId);
+		await deleteQrCode(existingProperty.qrId);
 		await db.delete(Properties).where(eq(Properties.id, Number(id)));
 
 		return res.status(200).json({
