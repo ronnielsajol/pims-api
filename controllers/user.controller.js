@@ -4,7 +4,14 @@ import { Users } from "../models/users.model.js";
 
 export const getAllUsers = async (req, res, next) => {
 	try {
-		const users = await db.select().from(Users);
+		const users = await db
+			.select({
+				id: Users.id,
+				name: Users.name,
+				email: Users.email,
+				role: Users.role,
+			})
+			.from(Users);
 
 		res.status(200).json({ success: true, data: users });
 	} catch (error) {
@@ -14,9 +21,16 @@ export const getAllUsers = async (req, res, next) => {
 
 export const getUsers = async (req, res, next) => {
 	try {
-		const users = await db.select().from(Users).where(eq(Users.role, "user"));
+		const users = await db
+			.select({
+				id: Users.id,
+				name: Users.name,
+				email: Users.email,
+			})
+			.from(Users)
+			.where(eq(Users.role, "user"));
 
-		res.status(200).json({ success: true, users });
+		res.status(200).json({ success: true, data: users });
 	} catch (error) {
 		next(error);
 	}
@@ -47,9 +61,16 @@ export const getUserById = async (req, res, next) => {
 
 export const getAdmins = async (req, res, next) => {
 	try {
-		const admins = await db.select().from(Users).where(eq(Users.role, "admin")); // Adjust based on your role column type
+		const admins = await db
+			.select({
+				id: Users.id,
+				name: Users.name,
+				email: Users.email,
+			})
+			.from(Users)
+			.where(eq(Users.role, "admin")); // Adjust based on your role column type
 
-		res.status(200).json({ success: true, admins });
+		res.status(200).json({ success: true, data: admins });
 	} catch (error) {
 		next(error);
 	}
