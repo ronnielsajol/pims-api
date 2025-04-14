@@ -2,11 +2,21 @@ import { eq } from "drizzle-orm";
 import { db } from "../database/supabase.js";
 import { Users } from "../models/users.model.js";
 
-export const getUsers = async (req, res, next) => {
+export const getAllUsers = async (req, res, next) => {
 	try {
 		const users = await db.select().from(Users);
 
 		res.status(200).json({ success: true, data: users });
+	} catch (error) {
+		next(error);
+	}
+};
+
+export const getUsers = async (req, res, next) => {
+	try {
+		const users = await db.select().from(Users).where(eq(Users.role, "user"));
+
+		res.status(200).json({ success: true, users });
 	} catch (error) {
 		next(error);
 	}
