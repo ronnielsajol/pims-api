@@ -11,4 +11,5 @@ export const {
 	JWT_SECRET,
 	JWT_EXPIRES_IN,
 	SUPABASE_DB_URL,
+	SCANNER_SECRET_KEY,
 } = process.env;

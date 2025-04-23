@@ -5,6 +5,7 @@ import {
 	deleteProperty,
 	getAllProperties,
 	getAssignedProperties,
+	getPropertyByScanner,
 	updateProperty,
 } from "../controllers/properties.controller.js";
 import authorize from "../middleware/auth.middleware.js";
@@ -19,6 +20,7 @@ propertiesRouter.patch("/update/:id", authorize, checkRole(["admin", "master_adm
 
 propertiesRouter.delete("/:id", authorize, checkRole(["admin", "master_admin"]), deleteProperty);
 
+propertiesRouter.get("/scan/:id", authorize, checkRole(["admin", "master_admin"]), getPropertyByScanner);
 propertiesRouter.get("/:userId", authorize, checkRole(["admin", "master_admin"]), getAssignedProperties);
 
 export default propertiesRouter;

@@ -5,6 +5,7 @@ import { Properties } from "../models/properties.model.js";
 import { Users } from "../models/users.model.js";
 import { Accountable } from "../models/accountable.model.js";
 import { deleteQrCode } from "../lib/deleteQrCode.js";
+import { SCANNER_SECRET_KEY } from "../config/env.js";
 
 export const getAllProperties = async (req, res, next) => {
 	try {
@@ -244,4 +245,31 @@ export const deleteProperty = async (req, res) => {
 		console.error("Error deleting property:", error);
 		res.status(500).json({ error: error.message });
 	}
+};
+
+export const getPropertyByScanner = async (req, res) => {
+	const { id } = req.params;
+	const scannerKey = req.headers["x-scanner-key"];
+
+	if (scannerKey !== SCANNER_SECRET_KEY) {
+		return res.status(401).json({ success: false, message: "Unauthorized scanner" });
+	}
+
+	const [property] = await db
+		.select({
+			id: Properties.id,
+			name: Properties.name,
+			description: Properties.description,
+		})
+		.from(Properties)
+		.where(eq(Properties.id, Number(id)));
+
+	if (!property) {
+		return res.status(404).json({ success: false, message: "Property not found" });
+	}
+
+	return res.status(200).json({
+		success: true,
+		data: property,
+	});
 };
