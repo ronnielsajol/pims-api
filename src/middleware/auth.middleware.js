@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import { JWT_SECRET } from "../config/env.js";
+import { env } from "../config/env.js";
 import { Users } from "../models/users.model.js";
 import { eq } from "drizzle-orm";
 import { db } from "../database/supabase.js";
@@ -16,7 +16,7 @@ const authorize = async (req, res, next) => {
 			return res.status(401).json({ message: "Unauthorized: No token provided" });
 		}
 
-		const decoded = jwt.verify(token, JWT_SECRET);
+		const decoded = jwt.verify(token, env.JWT_SECRET);
 		if (!decoded || !decoded.userId) {
 			return res.status(401).json({ message: "Unauthorized: Invalid token" });
 		}

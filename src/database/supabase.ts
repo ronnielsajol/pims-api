@@ -1,11 +1,11 @@
 import { drizzle } from "drizzle-orm/postgres-js";
-import { SUPABASE_DB_URL } from "../config/env.js";
+import { env } from "../config/env.js";
 import postgres from "postgres";
 
-if (!SUPABASE_DB_URL) {
+if (!env.SUPABASE_DB_URL) {
 	throw new Error("SUPABASE_DB_URL is required");
 }
-export const client = postgres(SUPABASE_DB_URL, { prepare: false });
+export const client = postgres(env.SUPABASE_DB_URL, { prepare: false });
 
 export const db = drizzle(client);
 

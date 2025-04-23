@@ -1,13 +1,37 @@
-import { db } from "../database/supabase.js";
-import { Users } from "../models/users.model.js";
-import { JWT_EXPIRES_IN, JWT_SECRET } from "../config/env.js";
+import { Request, Response, NextFunction } from "express";
+import { db } from "../database/supabase";
+import { Users } from "../models/users.model";
+import { env } from "../config/env";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { eq } from "drizzle-orm";
 
-export const signUp = async (req, res, next) => {
+interface AuthRequest extends Request {
+	body: {
+		name?: string;
+		email: string;
+		password: string;
+		role?: string;
+	};
+}
+
+const secret = env.JWT_SECRET;
+const expiresIn = env.JWT_EXPIRES_IN;
+
+if (!secret) {
+	throw new Error("JWT_SECRET environment variable is not set.");
+}
+if (!expiresIn) {
+	throw new Error("JWT_EXPIRES_IN environment variable is not set.");
+}
+
+export const signUp = async (req: AuthRequest, res: Response, next: NextFunction) => {
 	try {
 		const { name, email, password } = req.body;
+
+		if (!name || !email || !password) {
+			return res.status(400).json({ success: false, message: "Missing required fields" });
+		}
 
 		// Check if the user already exists
 		const existingUser = await db.select().from(Users).where(eq(Users.email, email));
@@ -21,9 +45,8 @@ export const signUp = async (req, res, next) => {
 		// Insert new user and return the inserted row
 		const [newUser] = await db.insert(Users).values({ name, email, password: hashedPassword }).returning();
 
-		// Generate JWT token
-		const token = jwt.sign({ userId: newUser.id }, JWT_SECRET, {
-			expiresIn: JWT_EXPIRES_IN,
+		const token = jwt.sign({ userId: newUser?.id }, env.JWT_SECRET, {
+			expiresIn: "1d",
 		});
 
 		res.status(201).json({
@@ -36,14 +59,16 @@ export const signUp = async (req, res, next) => {
 	}
 };
 
-export const adminSignUp = async (req, res, next) => {
+export const adminSignUp = async (req: AuthRequest, res: Response, next: NextFunction) => {
 	try {
 		const { name, email, password, role } = req.body;
 
+		if (!name || !email || !password) {
+			return res.status(400).json({ success: false, message: "Missing required fields" });
+		}
+
 		if (!role) {
-			const error = new Error("Unauthorized: This is for admin access only");
-			error.status = 401;
-			throw error;
+			return res.status(401).json({ success: false, message: "Unauthorized: Admin role required" });
 		}
 
 		const existingUser = await db.select().from(Users).where(eq(Users.email, email));
@@ -57,8 +82,8 @@ export const adminSignUp = async (req, res, next) => {
 
 		const [newUser] = await db.insert(Users).values({ name, email, password: hashedPassword, role }).returning();
 
-		const token = jwt.sign({ userId: newUser.id, role }, JWT_SECRET, {
-			expiresIn: JWT_EXPIRES_IN,
+		const token = jwt.sign({ userId: newUser.id, role }, env.JWT_SECRET, {
+			expiresIn: "1d",
 		});
 
 		res.status(201).json({
@@ -71,9 +96,13 @@ export const adminSignUp = async (req, res, next) => {
 	}
 };
 
-export const signIn = async (req, res, next) => {
+export const signIn = async (req: AuthRequest, res: Response, next: NextFunction) => {
 	try {
 		const { email, password } = req.body;
+
+		if (!email || !password) {
+			return res.status(400).json({ success: false, message: "Missing required fields" });
+		}
 
 		// Check if user exists
 		const existingUser = await db.select().from(Users).where(eq(Users.email, email));
@@ -90,8 +119,8 @@ export const signIn = async (req, res, next) => {
 		}
 
 		// Generate JWT token
-		const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, {
-			expiresIn: JWT_EXPIRES_IN,
+		const token = jwt.sign({ userId: user.id, role: user.role }, env.JWT_SECRET, {
+			expiresIn: "1d",
 		});
 
 		res.status(200).json({
@@ -104,6 +133,6 @@ export const signIn = async (req, res, next) => {
 	}
 };
 
-export const signOut = async (req, res) => {
+export const signOut = async (_req: Request, res: Response) => {
 	res.status(200).json({ success: true, message: "Sign out successful" });
 };

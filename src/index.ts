@@ -1,11 +1,11 @@
 import express from "express";
-import { PORT } from "./config/env.js";
+import { env } from "./config/env.js";
 
 import userRouter from "./routes/user.routes.js";
 import authRouter from "./routes/auth.routes.js";
 import propertiesRouter from "./routes/properties.routes.js";
-import { checkDBConnection } from "./database/supabase.js";
-import errorMiddleware from "./middleware/error.middleware.js";
+import { checkDBConnection } from "./database/supabase";
+import errorMiddleware from "./middleware/error.middleware";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 
@@ -27,8 +27,8 @@ app.get("/", (req, res) => {
 	res.send({ message: "Welcome to PIMS API" });
 });
 
-app.listen(PORT, async () => {
-	console.log(`Server is running on port ${PORT}`);
+app.listen(env.PORT, async () => {
+	console.log(`Server is running on port ${env.PORT}`);
 
 	await checkDBConnection();
 });

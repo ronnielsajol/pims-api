@@ -1,9 +1,9 @@
 import QRCode from "qrcode";
-import { storage } from "../lib/appwrite.js";
-import { APPWRITE_BUCKET_ID } from "../config/env.js";
+import { storage } from "./appwrite.js";
+import { env } from "../config/env.js";
 import { ID } from "appwrite";
 
-export async function generateQrCode(userId) {
+export async function generateQrCode(userId: number) {
 	try {
 		const qrDataUrl = await QRCode.toDataURL(String(userId), {
 			width: 500,
@@ -19,10 +19,10 @@ export async function generateQrCode(userId) {
 
 		const qrFile = new File([qrBlob], fileName, { type: "image/png" });
 
-		const response = await storage.createFile(APPWRITE_BUCKET_ID ?? "", ID.unique(), qrFile);
+		const response = await storage.createFile(env.APPWRITE_BUCKET_ID ?? "", ID.unique(), qrFile);
 		console.log("Appwrite response:", response);
 
-		const qrCodeUrl = storage.getFileView(APPWRITE_BUCKET_ID ?? "", response.$id);
+		const qrCodeUrl = storage.getFileView(env.APPWRITE_BUCKET_ID ?? "", response.$id);
 		console.log("Generated QR Code URL:", qrCodeUrl);
 
 		return {

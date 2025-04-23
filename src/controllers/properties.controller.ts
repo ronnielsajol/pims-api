@@ -1,13 +1,38 @@
+import { Request, Response, NextFunction } from "express";
 import { and, eq } from "drizzle-orm";
-import { db } from "../database/supabase.js";
-import { generateQrCode } from "../lib/generateQrCode.js";
-import { Properties } from "../models/properties.model.js";
-import { Users } from "../models/users.model.js";
-import { Accountable } from "../models/accountable.model.js";
-import { deleteQrCode } from "../lib/deleteQrCode.js";
-import { SCANNER_SECRET_KEY } from "../config/env.js";
+import { db } from "../database/supabase";
+import { generateQrCode } from "../lib/generateQrCode";
+import { Properties } from "../models/properties.model";
+import { Users } from "../models/users.model";
+import { Accountable } from "../models/accountable.model";
+import { deleteQrCode } from "../lib/deleteQrCode";
+import { env } from "../config/env";
 
-export const getAllProperties = async (req, res, next) => {
+interface CreatePropertyRequest extends Request {
+	body: {
+		name: string;
+		description: string;
+	};
+}
+
+interface AssignRequest extends Request {
+	body: {
+		userId: number;
+		propertyId: number;
+	};
+}
+
+interface DeleteRequest extends Request {
+	params: { id: string };
+	body: { confirmed?: boolean };
+}
+
+interface ScannerRequest extends Request {
+	params: { id: string };
+	headers: { "x-scanner-key"?: string };
+}
+
+export const getAllProperties = async (_req: Request, res: Response, next: NextFunction) => {
 	try {
 		const properties = await db
 			.select({
@@ -23,14 +48,11 @@ export const getAllProperties = async (req, res, next) => {
 		next(error);
 	}
 };
-export const addProperty = async (req, res, next) => {
+export const addProperty = async (req: CreatePropertyRequest, res: Response, next: NextFunction) => {
 	try {
 		const { name, description } = req.body;
-
 		if (!name || !description) {
-			const error = new Error("Missing fields");
-			error.status = 400;
-			throw error;
+			return res.status(400).json({ message: "Missing fields" });
 		}
 
 		const [newProperty] = await db.insert(Properties).values({ name, description }).returning();
@@ -43,7 +65,10 @@ export const addProperty = async (req, res, next) => {
 			}
 		} catch (error) {
 			console.error("QR Code generation failed:", error);
-			return res.status(500).json({ message: "Failed to generate QR code", error: error.message });
+			if (error instanceof Error) {
+				return res.status(500).json({ message: "Failed to generate QR code", error: error.message });
+			}
+			return res.status(500).json({ error: error });
 		}
 
 		const [updateQr] = await db
@@ -62,21 +87,13 @@ export const addProperty = async (req, res, next) => {
 	}
 };
 
-export const updateProperty = async (req, res, next) => {
+export const updateProperty = async (req: Request, res: Response, next: NextFunction) => {
 	try {
 		const { id } = req.params;
 		const { name, description } = req.body;
 
 		if (!name && !description) {
-			const error = new Error("Missing fields");
-			error.status = 400;
-			throw error;
-		}
-
-		if (!id) {
-			const error = new Error("Missing id");
-			error.status = 400;
-			throw error;
+			return res.status(400).json({ message: "Missing fields" });
 		}
 
 		const [existingProperty] = await db
@@ -85,12 +102,10 @@ export const updateProperty = async (req, res, next) => {
 			.where(eq(Properties.id, Number(id)));
 
 		if (!existingProperty) {
-			const error = new Error("Property not found");
-			error.status = 404;
-			throw error;
+			return res.status(404).json({ message: "Property not found" });
 		}
 
-		const updateFields = {};
+		const updateFields: Record<string, any> = {};
 		if (name !== undefined) updateFields.name = name;
 		if (description !== undefined) updateFields.description = description;
 
@@ -116,14 +131,12 @@ export const updateProperty = async (req, res, next) => {
 	}
 };
 
-export const assignPropertyToStaff = async (req, res) => {
+export const assignPropertyToStaff = async (req: AssignRequest, res: Response) => {
 	try {
 		const { userId, propertyId } = req.body;
 
 		if (!userId || !propertyId) {
-			const error = new Error("Missing fields");
-			error.status = 400;
-			throw error;
+			return res.status(400).json({ error: "Missing fields" });
 		}
 
 		const [user] = await db.select().from(Users).where(eq(Users.id, userId));
@@ -161,7 +174,7 @@ export const assignPropertyToStaff = async (req, res) => {
 	}
 };
 
-export const getAssignedProperties = async (req, res) => {
+export const getAssignedProperties = async (req: Request, res: Response) => {
 	try {
 		const { userId } = req.params;
 
@@ -192,19 +205,19 @@ export const getAssignedProperties = async (req, res) => {
 		});
 	} catch (error) {
 		console.error("Error getting assigned properties:", error);
-		res.status(500).json({ error: error.message });
+		if (error instanceof Error) {
+			return res.status(500).json({ error: error.message });
+		}
+		return res.status(500).json({ error: error });
 	}
 };
 
-export const deleteProperty = async (req, res) => {
+export const deleteProperty = async (req: DeleteRequest, res: Response) => {
 	try {
 		const { id } = req.params;
 		const { confirmed } = req.body;
-		if (!id) {
-			const error = new Error("Missing id");
-			error.status = 400;
-			throw error;
-		}
+
+		if (!id) return res.status(400).json({ error: "Missing id" });
 
 		const [existingProperty] = await db
 			.select()
@@ -233,7 +246,7 @@ export const deleteProperty = async (req, res) => {
 		await db.delete(Accountable).where(eq(Accountable.propertyId, Number(id)));
 
 		// Now delete the property itself
-		await deleteQrCode(existingProperty.qrId);
+		await deleteQrCode(existingProperty.qrId as string); // Delete the QR code from Appwrite storage
 		await db.delete(Properties).where(eq(Properties.id, Number(id)));
 
 		return res.status(200).json({
@@ -243,15 +256,18 @@ export const deleteProperty = async (req, res) => {
 		});
 	} catch (error) {
 		console.error("Error deleting property:", error);
-		res.status(500).json({ error: error.message });
+		if (error instanceof Error) {
+			return res.status(500).json({ error: error.message });
+		}
+		return res.status(500).json({ error: error });
 	}
 };
 
-export const getPropertyByScanner = async (req, res) => {
+export const getPropertyByScanner = async (req: ScannerRequest, res: Response) => {
 	const { id } = req.params;
 	const scannerKey = req.headers["x-scanner-key"];
 
-	if (scannerKey !== SCANNER_SECRET_KEY) {
+	if (scannerKey !== env.SCANNER_SECRET_KEY) {
 		return res.status(401).json({ success: false, message: "Unauthorized scanner" });
 	}
 

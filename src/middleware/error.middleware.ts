@@ -1,17 +1,22 @@
-const errorMiddleware = (err, req, res, next) => {
-	try {
-		let error = { ...err };
+import { Request, Response, NextFunction } from "express";
 
+interface CustomError extends Error {
+	statusCode?: number;
+	code?: string;
+}
+
+const errorMiddleware = (err: CustomError, req: Request, res: Response, next: NextFunction): void => {
+	try {
+		let error: CustomError = { ...err };
 		error.message = err.message;
 
-		console.error(err);
+		console.error("❌ Error:", err);
 
-		// Handle PostgreSQL-specific errors
 		if (err.code) {
 			switch (err.code) {
 				case "23505":
 					error.message = "Duplicate entry. This record already exists.";
-					error.statusCode = 409; // Conflict
+					error.statusCode = 409;
 					break;
 				case "23503":
 					error.message = "Foreign key constraint violated.";
