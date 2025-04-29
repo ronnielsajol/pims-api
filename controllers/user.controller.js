@@ -28,7 +28,7 @@ export const getUsers = async (req, res, next) => {
 				email: Users.email,
 			})
 			.from(Users)
-			.where(eq(Users.role, "user"));
+			.where(eq(Users.role, "staff"));
 
 		res.status(200).json({ success: true, data: users });
 	} catch (error) {

@@ -9,7 +9,9 @@ import { SCANNER_SECRET_KEY } from "../config/env.js";
 
 export const getAllProperties = async (req, res, next) => {
 	try {
-		const properties = await db
+		const includeAssignments = req.query.includeAssignments === "true";
+
+		let baseQuery = db
 			.select({
 				id: Properties.id,
 				name: Properties.name,
@@ -18,6 +20,21 @@ export const getAllProperties = async (req, res, next) => {
 			})
 			.from(Properties);
 
+		if (includeAssignments) {
+			baseQuery = db
+				.select({
+					id: Properties.id,
+					name: Properties.name,
+					description: Properties.description,
+					qrCode: Properties.qrCode,
+					assignedTo: Users.name,
+				})
+				.from(Properties)
+				.leftJoin(Accountable, eq(Properties.id, Accountable.propertyId))
+				.leftJoin(Users, eq(Accountable.userId, Users.id));
+		}
+
+		const properties = await baseQuery;
 		res.status(200).json({ success: true, data: properties });
 	} catch (error) {
 		next(error);
@@ -136,6 +153,17 @@ export const assignPropertyToStaff = async (req, res) => {
 			return res.status(404).json({ error: "Property not found" });
 		}
 
+		const [existingAssignmentForProperty] = await db
+			.select()
+			.from(Accountable)
+			.where(eq(Accountable.propertyId, propertyId));
+
+		if (existingAssignmentForProperty) {
+			return res.status(400).json({
+				error: "This property is already assigned to another user.",
+			});
+		}
+
 		const [existingAssignment] = await db
 			.select()
 			.from(Accountable)
@@ -169,7 +197,6 @@ export const getAssignedProperties = async (req, res) => {
 			return res.status(400).json({ error: "Missing userId" });
 		}
 
-		// Fetch all properties assigned to the user via join
 		const assignedProperties = await db
 			.select({
 				id: Properties.id,
@@ -180,10 +207,6 @@ export const getAssignedProperties = async (req, res) => {
 			.from(Accountable)
 			.innerJoin(Properties, eq(Accountable.propertyId, Properties.id))
 			.where(eq(Accountable.userId, Number(userId)));
-
-		if (assignedProperties.length === 0) {
-			return res.status(404).json({ error: "No properties assigned to this user" });
-		}
 
 		return res.status(200).json({
 			success: true,
