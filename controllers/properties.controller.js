@@ -245,7 +245,7 @@ export const deleteProperty = async (req, res) => {
 
 		// If there are existing assignments and confirmation is not provided
 		if (existingAssignments.length > 0 && !confirmed) {
-			return res.status(400).json({
+			return res.status(200).json({
 				error: "Property is assigned to users. Please confirm deletion.",
 				message: "Are you sure you want to delete this property?",
 				requiresConfirmation: true,
@@ -276,6 +276,32 @@ export const getPropertyByScanner = async (req, res) => {
 
 	if (scannerKey !== SCANNER_SECRET_KEY) {
 		return res.status(401).json({ success: false, message: "Unauthorized scanner" });
+	}
+
+	const [property] = await db
+		.select({
+			id: Properties.id,
+			name: Properties.name,
+			description: Properties.description,
+		})
+		.from(Properties)
+		.where(eq(Properties.id, Number(id)));
+
+	if (!property) {
+		return res.status(404).json({ success: false, message: "Property not found" });
+	}
+
+	return res.status(200).json({
+		success: true,
+		data: property,
+	});
+};
+
+export const getProperty = async (req, res) => {
+	const { id } = req.params;
+
+	if (!id) {
+		return res.status(400).json({ error: "Missing id" });
 	}
 
 	const [property] = await db
