@@ -1,7 +1,7 @@
 import { Router } from "express";
 import {
 	addProperty,
-	assignPropertyToStaff,
+	assignOrReassignPropertyToStaff,
 	deleteProperty,
 	getAllProperties,
 	getAssignedProperties,
@@ -16,9 +16,8 @@ const propertiesRouter = Router();
 
 propertiesRouter.get("/all", authorize, checkRole(["admin", "master_admin"]), getAllProperties);
 propertiesRouter.post("/add", authorize, checkRole(["admin", "master_admin"]), addProperty);
-propertiesRouter.post("/assign", authorize, checkRole(["admin", "master_admin"]), assignPropertyToStaff);
+propertiesRouter.post("/assign", authorize, checkRole(["admin", "master_admin"]), assignOrReassignPropertyToStaff);
 propertiesRouter.patch("/update/:id", authorize, checkRole(["admin", "master_admin"]), updateProperty);
-
 propertiesRouter.delete("/:id", authorize, checkRole(["admin", "master_admin"]), deleteProperty);
 
 propertiesRouter.get("/:id", authorize, checkRole(["admin", "master_admin"]), getProperty);

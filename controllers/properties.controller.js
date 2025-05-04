@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "../database/supabase.js";
 import { generateQrCode } from "../lib/generateQrCode.js";
 import { Properties } from "../models/properties.model.js";
@@ -133,14 +133,12 @@ export const updateProperty = async (req, res, next) => {
 	}
 };
 
-export const assignPropertyToStaff = async (req, res) => {
+export const assignOrReassignPropertyToStaff = async (req, res) => {
 	try {
 		const { userId, propertyId } = req.body;
 
 		if (!userId || !propertyId) {
-			const error = new Error("Missing fields");
-			error.status = 400;
-			throw error;
+			return res.status(400).json({ error: "Missing fields" });
 		}
 
 		const [user] = await db.select().from(Users).where(eq(Users.id, userId));
@@ -153,42 +151,41 @@ export const assignPropertyToStaff = async (req, res) => {
 			return res.status(404).json({ error: "Property not found" });
 		}
 
-		const [existingAssignmentForProperty] = await db
-			.select()
-			.from(Accountable)
-			.where(eq(Accountable.propertyId, propertyId));
+		const [existingAssignment] = await db.select().from(Accountable).where(eq(Accountable.propertyId, propertyId));
 
-		if (existingAssignmentForProperty) {
-			return res.status(400).json({
-				error: "This property is already assigned to another user.",
+		if (existingAssignment) {
+			// If assigned to the same user, no need to reassign
+			if (existingAssignment.userId === userId) {
+				return res.status(400).json({ error: "Property already assigned to this user" });
+			}
+
+			// Reassign: update the record with new userId
+			const updated = await db.update(Accountable).set({ userId }).where(eq(Accountable.propertyId, propertyId)).returning();
+
+			return res.status(200).json({
+				success: true,
+				message: "Property reassigned successfully",
+				data: { assignment: updated[0] },
 			});
 		}
 
-		const [existingAssignment] = await db
-			.select()
-			.from(Accountable)
-			.where(and(eq(Accountable.userId, userId), eq(Accountable.propertyId, propertyId)));
-		if (existingAssignment) {
-			return res.status(400).json({ error: "Property already assigned to this user" });
-		}
+		// No assignment yet, insert new
+		const [newAssignment] = await db.insert(Accountable).values({ userId, propertyId }).returning();
 
-		const [assigned] = await db.insert(Accountable).values({ userId, propertyId }).returning();
-
-		if (!assigned) {
+		if (!newAssignment) {
 			return res.status(500).json({ error: "Failed to assign property" });
 		}
 
 		return res.status(201).json({
 			success: true,
-			messsage: "Property assigned successfully",
-			data: { assignment: assigned },
+			message: "Property assigned successfully",
+			data: { assignment: newAssignment },
 		});
 	} catch (error) {
-		console.error("Error assigning property to staff:", error);
+		console.error("Error assigning or reassigning property:", error);
 		res.status(500).json({ error: "Internal server error" });
 	}
 };
-
 export const getAssignedProperties = async (req, res) => {
 	try {
 		const { userId } = req.params;
