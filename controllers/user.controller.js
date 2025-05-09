@@ -28,7 +28,8 @@ export const getUsers = async (req, res, next) => {
 				email: Users.email,
 			})
 			.from(Users)
-			.where(eq(Users.role, "staff"));
+			.where(eq(Users.role, "staff"))
+			.orderBy(Users.id, "asc");
 
 		res.status(200).json({ success: true, data: users });
 	} catch (error) {
@@ -68,7 +69,8 @@ export const getAdmins = async (req, res, next) => {
 				email: Users.email,
 			})
 			.from(Users)
-			.where(eq(Users.role, "admin")); // Adjust based on your role column type
+			.where(eq(Users.role, "admin"))
+			.orderBy(Users.id, "asc");
 
 		res.status(200).json({ success: true, data: admins });
 	} catch (error) {

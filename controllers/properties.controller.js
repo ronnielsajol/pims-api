@@ -31,7 +31,8 @@ export const getAllProperties = async (req, res, next) => {
 				})
 				.from(Properties)
 				.leftJoin(Accountable, eq(Properties.id, Accountable.propertyId))
-				.leftJoin(Users, eq(Accountable.userId, Users.id));
+				.leftJoin(Users, eq(Accountable.userId, Users.id))
+				.orderBy(Properties.id, "asc");
 		}
 
 		const properties = await baseQuery;
