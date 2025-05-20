@@ -1,0 +1,72 @@
+name: Deploy API to EC2 on Main Merge
+
+on:
+  push:
+    branches:
+      - main # Or your primary deployment branch, e.g., master
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest # Uses a GitHub-hosted runner
+
+    steps:
+    # Step 1: Checkout your repository code from the branch that triggered the workflow
+    - name: Checkout the repository
+      uses: actions/checkout@v4
+
+    # Step 2: SSH into your EC2 instance and run deployment commands
+    - name: Deploy to EC2 instance via SSH
+      uses: appleboy/ssh-action@master # A popular action for SSH
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USERNAME }}
+        key: ${{ secrets.EC2_SSH_KEY }} # The private key for EC2_USERNAME
+        port: ${{ secrets.EC2_PORT || 22 }} # Defaults to 22 if EC2_PORT secret isn't set
+        script: |
+          echo "--- Starting deployment on EC2 ---"
+          echo "Target directory: ${{ secrets.API_DIRECTORY }}"
+          cd ${{ secrets.API_DIRECTORY }}
+
+          echo "Ensuring we are on the main branch locally and pulling latest changes..."
+          git checkout main  # Or your deployment branch
+          git pull origin main # Or your deployment branch
+
+          echo "Installing/updating dependencies..."
+          # !!! IMPORTANT: Customize commands below for YOUR API's stack !!!
+          # Example for Node.js/npm:
+          if [ -f package-lock.json ]; then
+            npm ci  # 'ci' is generally better for CI/CD if you have a lock file
+          elif [ -f package.json ]; then
+            npm install
+          fi
+          # If you have a build step for your Node.js app (e.g., TypeScript, frontend assets)
+          # npm run build
+
+          # Example for Python/pip with requirements.txt:
+          # if [ -f requirements.txt ]; then
+          #   pip install -r requirements.txt
+          # fi
+
+          # Example for Ruby/bundler:
+          # if [ -f Gemfile ]; then
+          #  bundle install --without development test
+          # fi
+
+          echo "Restarting application..."
+          # !!! IMPORTANT: Customize the restart command for YOUR API !!!
+          # Example for PM2 (Node.js):
+          # pm2 restart your-app-name-or-id  # Replace with your PM2 app name or ID
+
+          # Example for systemd (common for various services):
+          # sudo systemctl restart your-api-service-name.service # Replace with your systemd service name
+
+          # Example if running with a simple node command (less robust for production):
+          # pkill node # This is a rough way to stop, be careful
+          # nohup node your-main-script.js & # This is also very basic
+
+          # Example for Docker (if you're deploying a new image or restarting containers):
+          # docker-compose -f ${{ secrets.API_DIRECTORY }}/docker-compose.yml pull # If you push images to a registry
+          # docker-compose -f ${{ secrets.API_DIRECTORY }}/docker-compose.yml up -d --build # If building on the EC2
+
+          echo "--- Deployment to EC2 finished successfully! ---"
