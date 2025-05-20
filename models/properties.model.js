@@ -8,8 +8,6 @@ export const Properties = pgTable("properties", {
 	quantity: text("quantity"),
 	value: text("value"),
 	serialNo: text("serial_no"),
-	accountablePerson: text("accountable_person"),
-	location: text("location"),
 
 	qrCode: text("qr_code"),
 	qrId: text("qr_id"),
