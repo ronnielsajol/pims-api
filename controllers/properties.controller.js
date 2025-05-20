@@ -14,8 +14,11 @@ export const getAllProperties = async (req, res, next) => {
 		let baseQuery = db
 			.select({
 				id: Properties.id,
-				name: Properties.name,
+				propertyNo: Properties.propertyNo,
 				description: Properties.description,
+				quantity: Properties.quantity,
+				value: Properties.value,
+				serialNo: Properties.serialNo,
 				qrCode: Properties.qrCode,
 			})
 			.from(Properties);
@@ -24,8 +27,11 @@ export const getAllProperties = async (req, res, next) => {
 			baseQuery = db
 				.select({
 					id: Properties.id,
-					name: Properties.name,
+					propertyNo: Properties.propertyNo,
 					description: Properties.description,
+					quantity: Properties.quantity,
+					value: Properties.value,
+					serialNo: Properties.serialNo,
 					qrCode: Properties.qrCode,
 					assignedTo: Users.name,
 				})
@@ -43,15 +49,24 @@ export const getAllProperties = async (req, res, next) => {
 };
 export const addProperty = async (req, res, next) => {
 	try {
-		const { name, description } = req.body;
+		const { property } = req.body;
 
-		if (!name || !description) {
+		if (!property?.propertyNo || !property?.description || !property?.quantity || !property?.value || !property?.serialNo) {
 			const error = new Error("Missing fields");
 			error.status = 400;
 			throw error;
 		}
 
-		const [newProperty] = await db.insert(Properties).values({ name, description }).returning();
+		const [newProperty] = await db
+			.insert(Properties)
+			.values({
+				propertyNo: property.propertyNo,
+				description: property.description,
+				quantity: property.quantity,
+				value: property.value,
+				serialNo: property.serialNo,
+			})
+			.returning();
 
 		let qrCode;
 		try {
@@ -83,9 +98,9 @@ export const addProperty = async (req, res, next) => {
 export const updateProperty = async (req, res, next) => {
 	try {
 		const { id } = req.params;
-		const { name, description } = req.body;
+		const { property } = req.body;
 
-		if (!name && !description) {
+		if (!property?.propertyNo || !property?.description || !property?.quantity || !property?.value || !property?.serialNo) {
 			const error = new Error("Missing fields");
 			error.status = 400;
 			throw error;
