@@ -7,7 +7,13 @@ import { eq } from "drizzle-orm";
 
 export const signUp = async (req, res, next) => {
 	try {
-		const { name, email, password } = req.body;
+		const { name, email, password, role } = req.body;
+
+		if (role && role !== "staff") {
+			if (!req.user || req.user.role !== "master_admin") {
+				return res.status(401).json({ success: false, message: "Only Master admin can assign roles" });
+			}
+		}
 
 		// Check if the user already exists
 		const existingUser = await db.select().from(Users).where(eq(Users.email, email));
@@ -19,7 +25,10 @@ export const signUp = async (req, res, next) => {
 		const hashedPassword = await bcrypt.hash(password, 10);
 
 		// Insert new user and return the inserted row
-		const [newUser] = await db.insert(Users).values({ name, email, password: hashedPassword }).returning();
+		const [newUser] = await db
+			.insert(Users)
+			.values({ name, email, password: hashedPassword, role: role || "staff" })
+			.returning();
 
 		// Generate JWT token
 		const token = jwt.sign({ userId: newUser.id }, JWT_SECRET, {

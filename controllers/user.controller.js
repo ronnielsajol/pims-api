@@ -1,37 +1,29 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "../database/supabase.js";
 import { Users } from "../models/users.model.js";
 
-export const getAllUsers = async (req, res, next) => {
-	try {
-		const users = await db
-			.select({
-				id: Users.id,
-				name: Users.name,
-				email: Users.email,
-				role: Users.role,
-			})
-			.from(Users);
-
-		res.status(200).json({ success: true, data: users });
-	} catch (error) {
-		next(error);
-	}
-};
-
 export const getUsers = async (req, res, next) => {
 	try {
-		const users = await db
-			.select({
-				id: Users.id,
-				name: Users.name,
-				email: Users.email,
-			})
-			.from(Users)
-			.where(eq(Users.role, "staff"))
-			.orderBy(Users.id, "asc");
+		const roles = req.query.roles;
+		const allowedRoles = Array.isArray(roles) ? roles : roles ? [roles] : [];
 
-		res.status(200).json({ success: true, data: users });
+		if (!roles) {
+			return res.status(400).json({ error: "Bad Request: roles query parameter is required" });
+		}
+		// Only master_admin can fetch admins
+		if (allowedRoles.includes("admin") && req.user.role !== "master_admin") {
+			return res.status(403).json({ error: "Forbidden: Only master_admin can view admins" });
+		}
+
+		// Build query dynamically
+		let query = db.select({ id: Users.id, name: Users.name, email: Users.email, role: Users.role }).from(Users);
+
+		if (allowedRoles.length > 0) {
+			query = query.where(inArray(Users.role, allowedRoles));
+		}
+
+		const users = await query.orderBy(Users.id);
+		return res.status(200).json({ success: true, data: users });
 	} catch (error) {
 		next(error);
 	}
@@ -55,24 +47,6 @@ export const getUserById = async (req, res, next) => {
 		}
 
 		res.status(200).json({ success: true, data: user });
-	} catch (error) {
-		next(error);
-	}
-};
-
-export const getAdmins = async (req, res, next) => {
-	try {
-		const admins = await db
-			.select({
-				id: Users.id,
-				name: Users.name,
-				email: Users.email,
-			})
-			.from(Users)
-			.where(eq(Users.role, "admin"))
-			.orderBy(Users.id, "asc");
-
-		res.status(200).json({ success: true, data: admins });
 	} catch (error) {
 		next(error);
 	}

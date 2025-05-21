@@ -100,51 +100,48 @@ export const updateProperty = async (req, res, next) => {
 		const { id } = req.params;
 		const { property } = req.body;
 
-		if (!property?.propertyNo || !property?.description || !property?.quantity || !property?.value || !property?.serialNo) {
-			const error = new Error("Missing fields");
-			error.status = 400;
-			throw error;
+		if (!id || !property) {
+			throw new Error("Missing ID or property data");
 		}
 
-		if (!id) {
-			const error = new Error("Missing id");
-			error.status = 400;
-			throw error;
+		const required = ["propertyNo", "description", "quantity", "value", "serialNo"];
+		for (const key of required) {
+			if (!property[key]) {
+				throw new Error(`Missing field: ${key}`);
+			}
 		}
 
-		const [existingProperty] = await db
+		const [existing] = await db
+			.select()
+			.from(Properties)
+			.where(eq(Properties.id, Number(id)));
+		if (!existing) {
+			return res.status(404).json({ success: false, message: "Property not found" });
+		}
+
+		await db
+			.update(Properties)
+			.set({
+				propertyNo: property.propertyNo,
+				description: property.description,
+				quantity: property.quantity,
+				value: property.value,
+				serialNo: property.serialNo,
+				updatedAt: new Date(),
+			})
+			.where(eq(Properties.id, Number(id)));
+
+		const [updated] = await db
 			.select()
 			.from(Properties)
 			.where(eq(Properties.id, Number(id)));
 
-		if (!existingProperty) {
-			const error = new Error("Property not found");
-			error.status = 404;
-			throw error;
-		}
-
-		const updateFields = {};
-		if (name !== undefined) updateFields.name = name;
-		if (description !== undefined) updateFields.description = description;
-
-		await db
-			.update(Properties)
-			.set(updateFields)
-			.where(eq(Properties.id, Number(id)));
-
-		const [updatedProperty] = await db
-			.select({
-				id: Properties.id,
-				name: Properties.name,
-				description: Properties.description,
-			})
-			.from(Properties)
-			.where(eq(Properties.id, Number(id)));
-		return res
-			.status(200)
-			.json({ success: true, message: "Property updated successfully", data: { property: updatedProperty } });
+		return res.status(200).json({
+			success: true,
+			message: "Property updated successfully",
+			data: { property: updated },
+		});
 	} catch (error) {
-		console.error("Error updating property:", error);
 		next(error);
 	}
 };
@@ -213,7 +210,7 @@ export const getAssignedProperties = async (req, res) => {
 		const assignedProperties = await db
 			.select({
 				id: Properties.id,
-				name: Properties.name,
+				propertyNo: Properties.propertyNo,
 				description: Properties.description,
 				qrCode: Properties.qrCode,
 			})
@@ -294,7 +291,7 @@ export const getPropertyByScanner = async (req, res) => {
 	const [property] = await db
 		.select({
 			id: Properties.id,
-			name: Properties.name,
+			propertyNo: Properties.propertyNo,
 			description: Properties.description,
 		})
 		.from(Properties)
@@ -320,8 +317,12 @@ export const getProperty = async (req, res) => {
 	const [property] = await db
 		.select({
 			id: Properties.id,
-			name: Properties.name,
+			propertyNo: Properties.propertyNo,
 			description: Properties.description,
+			quantity: Properties.quantity,
+			value: Properties.value,
+			serialNo: Properties.serialNo,
+			qrCode: Properties.qrCode,
 		})
 		.from(Properties)
 		.where(eq(Properties.id, Number(id)));
