@@ -148,6 +148,8 @@ export const updateProperty = async (req, res, next) => {
 
 export const assignOrReassignPropertyToStaff = async (req, res) => {
 	try {
+		// This is for assigning or reassigning a property to a user
+
 		const { userId, propertyId } = req.body;
 
 		if (!userId || !propertyId) {
