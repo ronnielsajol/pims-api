@@ -25,7 +25,8 @@ const authorize = async (req, res, next) => {
 			return res.status(401).json({ message: "Unauthorized: User not found" });
 		}
 
-		req.user = user[0];
+		const { password: _, ...userData } = user[0];
+		req.user = userData;
 
 		next();
 	} catch (error) {

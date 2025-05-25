@@ -1,4 +1,5 @@
 export * from "./users.model";
-export * from "./accountable.model";
+export * from "./custodian-assignments.model";
+export * from "./staff-assignments.model";
 export * from "./log.model";
 export * from "./properties.model";

@@ -1,53 +1,78 @@
-import { eq } from "drizzle-orm";
+import { aliasedTable, and, eq, getTableColumns, sql } from "drizzle-orm";
 import { db } from "../database/supabase.js";
 import { generateQrCode } from "../lib/generateQrCode.js";
 import { Properties } from "../models/properties.model.js";
 import { Users } from "../models/users.model.js";
-import { Accountable } from "../models/accountable.model.js";
 import { deleteQrCode } from "../lib/deleteQrCode.js";
 import { SCANNER_SECRET_KEY } from "../config/env.js";
 import { generatePrintableQrFromUrl } from "../lib/generatePrintableQrCode.js";
+import { CustodianAssignments } from "../models/custodian-assignments.model.js";
+import { StaffAssignments } from "../models/staff-assignments.model.js";
 
 export const getAllProperties = async (req, res, next) => {
 	try {
-		const includeAssignments = req.query.includeAssignments === "true";
+		const user = req.user;
 
-		let baseQuery = db
-			.select({
-				id: Properties.id,
-				propertyNo: Properties.propertyNo,
-				description: Properties.description,
-				quantity: Properties.quantity,
-				value: Properties.value,
-				serialNo: Properties.serialNo,
-				qrCode: Properties.qrCode,
-			})
-			.from(Properties);
+		// --- ADMIN VIEW (CORRECTED) ---
+		// Shows the property and the CUSTODIAN it is assigned to.
+		if (user.role === "master_admin" || user.role === "admin") {
+			// 1. Correctly define the alias for the Users table BEFORE the query
+			const custodianUser = aliasedTable(Users, "custodian");
 
-		if (includeAssignments) {
-			baseQuery = db
+			const properties = await db
 				.select({
-					id: Properties.id,
-					propertyNo: Properties.propertyNo,
-					description: Properties.description,
-					quantity: Properties.quantity,
-					value: Properties.value,
-					serialNo: Properties.serialNo,
-					qrCode: Properties.qrCode,
-					assignedTo: Users.name,
+					// Select all columns from the Properties table
+					...getTableColumns(Properties),
+					// 2. Use the alias to select the custodian's name
+					assignedTo: custodianUser.name,
 				})
 				.from(Properties)
-				.leftJoin(Accountable, eq(Properties.id, Accountable.propertyId))
-				.leftJoin(Users, eq(Accountable.userId, Users.id))
-				.orderBy(Properties.id, "asc");
+				.leftJoin(CustodianAssignments, eq(Properties.id, CustodianAssignments.propertyId))
+				// 3. Use the alias in the join condition
+				.leftJoin(custodianUser, eq(CustodianAssignments.custodianId, custodianUser.id))
+				.orderBy(Properties.id);
+
+			return res.status(200).json({ success: true, data: properties });
 		}
 
-		const properties = await baseQuery;
-		res.status(200).json({ success: true, data: properties });
+		// --- CUSTODIAN VIEW (No changes, was already correct) ---
+		if (user.role === "property_custodian") {
+			const custodianUser = aliasedTable(Users, "custodian");
+			const staffUser = aliasedTable(Users, "staff");
+
+			const properties = await db
+				.select({
+					...getTableColumns(Properties),
+					assignedTo: sql`COALESCE(${staffUser.name}, ${custodianUser.name})`,
+				})
+				.from(CustodianAssignments)
+				.where(eq(CustodianAssignments.custodianId, user.id))
+				.innerJoin(Properties, eq(CustodianAssignments.propertyId, Properties.id))
+				.innerJoin(custodianUser, eq(CustodianAssignments.custodianId, custodianUser.id))
+				.leftJoin(StaffAssignments, eq(CustodianAssignments.propertyId, StaffAssignments.propertyId))
+				.leftJoin(staffUser, eq(StaffAssignments.staffId, staffUser.id));
+
+			return res.status(200).json({ success: true, data: properties });
+		}
+
+		// --- STAFF VIEW (No changes, was already correct) ---
+		if (user.role === "staff") {
+			const properties = await db
+				.select({
+					...getTableColumns(Properties),
+				})
+				.from(StaffAssignments)
+				.where(eq(StaffAssignments.staffId, user.id))
+				.innerJoin(Properties, eq(StaffAssignments.propertyId, Properties.id));
+			return res.status(200).json({ success: true, data: properties });
+		}
+
+		return res.status(403).json({ success: false, message: "Forbidden" });
 	} catch (error) {
 		next(error);
 	}
 };
+
 export const addProperty = async (req, res, next) => {
 	try {
 		const { property } = req.body;
@@ -147,59 +172,80 @@ export const updateProperty = async (req, res, next) => {
 	}
 };
 
-export const assignOrReassignPropertyToStaff = async (req, res) => {
+export const assignOrReassignProperty = async (req, res, next) => {
 	try {
-		// This is for assigning or reassigning a property to a user
+		const assigner = req.user;
+		const { propertyId, userId: assigneeId } = req.body;
 
-		const { userId, propertyId } = req.body;
-
-		if (!userId || !propertyId) {
-			return res.status(400).json({ error: "Missing fields" });
-		}
-
-		const [user] = await db.select().from(Users).where(eq(Users.id, userId));
-		if (!user) {
-			return res.status(404).json({ error: "User not found" });
-		}
-
-		const [property] = await db.select().from(Properties).where(eq(Properties.id, propertyId));
-		if (!property) {
-			return res.status(404).json({ error: "Property not found" });
-		}
-
-		const [existingAssignment] = await db.select().from(Accountable).where(eq(Accountable.propertyId, propertyId));
-
-		if (existingAssignment) {
-			// If assigned to the same user, no need to reassign
-			if (existingAssignment.userId === userId) {
-				return res.status(400).json({ error: "Property already assigned to this user" });
+		// --- ADMIN/MASTER ADMIN ASSIGNING TO CUSTODIAN ---
+		if (assigner.role === "master_admin" || assigner.role === "admin") {
+			const [assignee] = await db.select().from(Users).where(eq(Users.id, assigneeId));
+			if (assignee?.role !== "property_custodian") {
+				return res.status(400).json({ success: false, message: "Admins can only assign properties to Property Custodians." });
 			}
 
-			// Reassign: update the record with new userId
-			const updated = await db.update(Accountable).set({ userId }).where(eq(Accountable.propertyId, propertyId)).returning();
+			// Upsert logic: insert a new assignment or update the existing one
+			const [newAssignment] = await db
+				.insert(CustodianAssignments)
+				.values({
+					propertyId,
+					custodianId: assigneeId,
+					assignedBy: assigner.id,
+				})
+				.onConflictDoUpdate({
+					target: CustodianAssignments.propertyId,
+					set: { custodianId: assigneeId, assignedBy: assigner.id, assignedAt: new Date() },
+				})
+				.returning();
 
-			return res.status(200).json({
-				success: true,
-				message: "Property reassigned successfully",
-				data: { assignment: updated[0] },
-			});
+			// If we re-assign to a new custodian, we must clear any old staff delegations
+			await db.delete(StaffAssignments).where(eq(StaffAssignments.propertyId, propertyId));
+
+			return res
+				.status(200)
+				.json({ success: true, message: "Property assigned to custodian successfully.", data: newAssignment });
 		}
 
-		// No assignment yet, insert new
-		const [newAssignment] = await db.insert(Accountable).values({ userId, propertyId }).returning();
+		// --- PROPERTY CUSTODIAN DELEGATING TO STAFF ---
+		if (assigner.role === "property_custodian") {
+			const [assignee] = await db.select().from(Users).where(eq(Users.id, assigneeId));
+			if (assignee?.role !== "staff") {
+				return res.status(400).json({ success: false, message: "Custodians can only delegate properties to Staff." });
+			}
 
-		if (!newAssignment) {
-			return res.status(500).json({ error: "Failed to assign property" });
+			// Security check: Ensure this property is actually assigned to the custodian trying to delegate it
+			const [isOwner] = await db
+				.select()
+				.from(CustodianAssignments)
+				.where(and(eq(CustodianAssignments.propertyId, propertyId), eq(CustodianAssignments.custodianId, assigner.id)));
+			if (!isOwner) {
+				return res
+					.status(403)
+					.json({ success: false, message: "Forbidden: You are not the primary custodian for this property." });
+			}
+
+			// Upsert logic for delegation
+			const [newDelegation] = await db
+				.insert(StaffAssignments)
+				.values({
+					propertyId,
+					staffId: assigneeId,
+					assignedByCustodianId: assigner.id,
+				})
+				.onConflictDoUpdate({
+					target: StaffAssignments.propertyId,
+					set: { staffId: assigneeId, assignedAt: new Date() },
+				})
+				.returning();
+
+			return res
+				.status(200)
+				.json({ success: true, message: "Property delegated to staff successfully.", data: newDelegation });
 		}
 
-		return res.status(201).json({
-			success: true,
-			message: "Property assigned successfully",
-			data: { assignment: newAssignment },
-		});
+		return res.status(403).json({ success: false, message: "Forbidden: Your role cannot assign properties." });
 	} catch (error) {
-		console.error("Error assigning or reassigning property:", error);
-		res.status(500).json({ error: "Internal server error" });
+		next(error);
 	}
 };
 export const getAssignedProperties = async (req, res) => {
