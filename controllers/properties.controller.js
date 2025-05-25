@@ -248,24 +248,45 @@ export const assignOrReassignProperty = async (req, res, next) => {
 		next(error);
 	}
 };
-export const getAssignedProperties = async (req, res) => {
+export const getAssignedProperties = async (req, res, next) => {
 	try {
-		const { userId } = req.params;
-
-		if (!userId) {
-			return res.status(400).json({ error: "Missing userId" });
+		const userId = parseInt(req.params.userId, 10);
+		if (isNaN(userId)) {
+			return res.status(400).json({ success: false, message: "Invalid User ID provided." });
 		}
 
-		const assignedProperties = await db
-			.select({
-				id: Properties.id,
-				propertyNo: Properties.propertyNo,
-				description: Properties.description,
-				qrCode: Properties.qrCode,
-			})
-			.from(Accountable)
-			.innerJoin(Properties, eq(Accountable.propertyId, Properties.id))
-			.where(eq(Accountable.userId, Number(userId)));
+		// 1. Find the user to determine their role
+		const [user] = await db.select({ role: Users.role }).from(Users).where(eq(Users.id, userId));
+		if (!user) {
+			return res.status(404).json({ success: false, message: "User not found." });
+		}
+
+		let assignedProperties = [];
+
+		// 2. Query the correct table based on the user's role
+		if (user.role === "property_custodian") {
+			assignedProperties = await db
+				.select({
+					id: Properties.id,
+					propertyNo: Properties.propertyNo,
+					description: Properties.description,
+					qrCode: Properties.qrCode,
+				})
+				.from(CustodianAssignments)
+				.innerJoin(Properties, eq(CustodianAssignments.propertyId, Properties.id))
+				.where(eq(CustodianAssignments.custodianId, userId));
+		} else if (user.role === "staff") {
+			assignedProperties = await db
+				.select({
+					id: Properties.id,
+					propertyNo: Properties.propertyNo,
+					description: Properties.description,
+					qrCode: Properties.qrCode,
+				})
+				.from(StaffAssignments)
+				.innerJoin(Properties, eq(StaffAssignments.propertyId, Properties.id))
+				.where(eq(StaffAssignments.staffId, userId));
+		}
 
 		return res.status(200).json({
 			success: true,
@@ -273,62 +294,57 @@ export const getAssignedProperties = async (req, res) => {
 			data: assignedProperties,
 		});
 	} catch (error) {
-		console.error("Error getting assigned properties:", error);
-		res.status(500).json({ error: error.message });
+		next(error);
 	}
 };
 
-export const deleteProperty = async (req, res) => {
+export const deleteProperty = async (req, res, next) => {
 	try {
-		const { id } = req.params;
+		const propertyId = parseInt(req.params.id, 10);
+		if (isNaN(propertyId)) {
+			return res.status(400).json({ success: false, message: "Invalid Property ID." });
+		}
+
 		const { confirmed } = req.body;
-		if (!id) {
-			const error = new Error("Missing id");
-			error.status = 400;
-			throw error;
-		}
 
-		const [existingProperty] = await db
-			.select()
-			.from(Properties)
-			.where(eq(Properties.id, Number(id)));
+		const [existingProperty] = await db.select().from(Properties).where(eq(Properties.id, propertyId));
 		if (!existingProperty) {
-			return res.status(404).json({ error: "Property not found" });
+			return res.status(404).json({ success: false, message: "Property not found" });
 		}
 
-		// Fetch assignments for the property
-		const existingAssignments = await db
+		// 1. Check for primary assignments in the new table
+		const [existingAssignment] = await db
 			.select()
-			.from(Accountable)
-			.where(eq(Accountable.propertyId, Number(id)));
+			.from(CustodianAssignments)
+			.where(eq(CustodianAssignments.propertyId, propertyId));
 
-		// If there are existing assignments and confirmation is not provided
-		if (existingAssignments.length > 0 && !confirmed) {
+		if (existingAssignment && !confirmed) {
 			return res.status(200).json({
-				error: "Property is assigned to users. Please confirm deletion.",
-				message: "Are you sure you want to delete this property?",
+				success: false,
+				message: "This property is assigned to a custodian. Are you sure you want to delete it?",
 				requiresConfirmation: true,
 			});
 		}
 
-		// Delete all the assignments associated with this property
-		await db.delete(Accountable).where(eq(Accountable.propertyId, Number(id)));
+		// 2. No need to manually delete assignments. The database's "ON DELETE CASCADE" handles it.
 
-		// Now delete the property itself
-		await deleteQrCode(existingProperty.qrId);
-		await db.delete(Properties).where(eq(Properties.id, Number(id)));
+		// Delete the associated QR Code
+		if (existingProperty.qrId) {
+			await deleteQrCode(existingProperty.qrId);
+		}
+
+		// 3. Delete the property itself. The cascade will clean up the rest.
+		await db.delete(Properties).where(eq(Properties.id, propertyId));
 
 		return res.status(200).json({
 			success: true,
-			message: "Property deleted successfully",
-			data: { propertyId: id },
+			message: "Property and all its assignments deleted successfully",
+			data: { propertyId: propertyId },
 		});
 	} catch (error) {
-		console.error("Error deleting property:", error);
-		res.status(500).json({ error: error.message });
+		next(error);
 	}
 };
-
 export const getPropertyByScanner = async (req, res) => {
 	const { id } = req.params;
 	const scannerKey = req.headers["x-scanner-key"];
