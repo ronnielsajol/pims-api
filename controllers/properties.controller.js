@@ -6,6 +6,7 @@ import { Users } from "../models/users.model.js";
 import { Accountable } from "../models/accountable.model.js";
 import { deleteQrCode } from "../lib/deleteQrCode.js";
 import { SCANNER_SECRET_KEY } from "../config/env.js";
+import { generatePrintableQrFromUrl } from "../lib/generatePrintableQrCode.js";
 
 export const getAllProperties = async (req, res, next) => {
 	try {
@@ -337,4 +338,44 @@ export const getProperty = async (req, res) => {
 		success: true,
 		data: property,
 	});
+};
+
+export const getPrintableQr = async (req, res, next) => {
+	try {
+		const { id } = req.params;
+
+		if (!id) {
+			const error = new Error("Property ID is required.");
+			error.status = 400;
+			throw error;
+		}
+
+		// 1. Fetch the property from the database
+		const [property] = await db
+			.select({
+				qrCode: Properties.qrCode,
+			})
+			.from(Properties)
+			.where(eq(Properties.id, Number(id)));
+
+		if (!property) {
+			const error = new Error("Property not found.");
+			error.status = 404;
+			throw error;
+		}
+
+		if (!property.qrCode || !property.qrCode.startsWith("http")) {
+			const error = new Error("A valid QR code URL does not exist for this property.");
+			error.status = 404;
+			throw error;
+		}
+
+		// 2. Pass the URL to the helper function to get printable data
+		const printableData = await generatePrintableQrFromUrl(property.qrCode);
+
+		// 3. Return the printable data
+		res.status(200).json({ success: true, data: printableData });
+	} catch (error) {
+		next(error); // Pass errors to your middleware
+	}
 };
