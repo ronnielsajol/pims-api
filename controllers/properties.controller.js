@@ -43,13 +43,18 @@ export const getAllProperties = async (req, res, next) => {
 				.select({
 					...getTableColumns(Properties),
 					assignedTo: sql`COALESCE(${staffUser.name}, ${custodianUser.name})`,
+					reassignmentStatus: ReassignmentRequests.status,
 				})
 				.from(CustodianAssignments)
 				.where(eq(CustodianAssignments.custodianId, user.id))
 				.innerJoin(Properties, eq(CustodianAssignments.propertyId, Properties.id))
 				.innerJoin(custodianUser, eq(CustodianAssignments.custodianId, custodianUser.id))
 				.leftJoin(StaffAssignments, eq(CustodianAssignments.propertyId, StaffAssignments.propertyId))
-				.leftJoin(staffUser, eq(StaffAssignments.staffId, staffUser.id));
+				.leftJoin(staffUser, eq(StaffAssignments.staffId, staffUser.id))
+				.leftJoin(
+					ReassignmentRequests,
+					and(eq(Properties.id, ReassignmentRequests.propertyId), eq(ReassignmentRequests.status, "pending"))
+				);
 
 			return res.status(200).json({ success: true, data: properties });
 		}
