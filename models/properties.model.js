@@ -9,9 +9,6 @@ export const Properties = pgTable("properties", {
 	value: text("value"),
 	serialNo: text("serial_no"),
 
-	qrCode: text("qr_code"),
-	qrId: text("qr_id"),
-
 	createdAt: timestamp("created_at").defaultNow().notNull(),
 	updatedAt: timestamp("updated_at").defaultNow(),
 });

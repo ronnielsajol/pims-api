@@ -1,12 +1,11 @@
 import { aliasedTable, and, eq, getTableColumns, sql } from "drizzle-orm";
 import { db } from "../database/supabase.js";
-import { generateQrCode } from "../lib/generateQrCode.js";
 import { Properties } from "../models/properties.model.js";
 import { Users } from "../models/users.model.js";
-import { deleteQrCode } from "../lib/deleteQrCode.js";
 import { SCANNER_SECRET_KEY } from "../config/env.js";
 import { generatePrintableQrFromUrl } from "../lib/generatePrintableQrCode.js";
 import { CustodianAssignments } from "../models/custodian-assignments.model.js";
+import { ReassignmentRequests } from "../models/reassignment-requests.model.js";
 import { StaffAssignments } from "../models/staff-assignments.model.js";
 
 export const getAllProperties = async (req, res, next) => {
@@ -77,12 +76,14 @@ export const addProperty = async (req, res, next) => {
 	try {
 		const { property } = req.body;
 
+		// 1. Validate required fields
 		if (!property?.propertyNo || !property?.description || !property?.quantity || !property?.value || !property?.serialNo) {
-			const error = new Error("Missing fields");
+			const error = new Error("Missing required fields");
 			error.status = 400;
 			throw error;
 		}
 
+		// 2. Insert the new property into the database
 		const [newProperty] = await db
 			.insert(Properties)
 			.values({
@@ -94,27 +95,11 @@ export const addProperty = async (req, res, next) => {
 			})
 			.returning();
 
-		let qrCode;
-		try {
-			qrCode = await generateQrCode(newProperty.id);
-			if (!qrCode || !qrCode.url) {
-				return res.status(500).json({ message: "QR code generation failed" });
-			}
-		} catch (error) {
-			console.error("QR Code generation failed:", error);
-			return res.status(500).json({ message: "Failed to generate QR code", error: error.message });
-		}
-
-		const [updateQr] = await db
-			.update(Properties)
-			.set({ qrCode: qrCode.url, qrId: qrCode.id })
-			.where(eq(Properties.id, newProperty.id))
-			.returning();
-
+		// 3. Return a success response with the newly created property data
 		res.status(201).json({
 			success: true,
 			message: "Property added successfully",
-			data: { property: updateQr },
+			data: { property: newProperty },
 		});
 	} catch (error) {
 		next(error);
@@ -177,43 +162,32 @@ export const assignOrReassignProperty = async (req, res, next) => {
 		const assigner = req.user;
 		const { propertyId, userId: assigneeId } = req.body;
 
-		// --- ADMIN/MASTER ADMIN ASSIGNING TO CUSTODIAN ---
+		// --- ADMIN/MASTER ADMIN LOGIC ---
 		if (assigner.role === "master_admin" || assigner.role === "admin") {
 			const [assignee] = await db.select().from(Users).where(eq(Users.id, assigneeId));
 			if (assignee?.role !== "property_custodian") {
 				return res.status(400).json({ success: false, message: "Admins can only assign properties to Property Custodians." });
 			}
-
-			// Upsert logic: insert a new assignment or update the existing one
 			const [newAssignment] = await db
 				.insert(CustodianAssignments)
-				.values({
-					propertyId,
-					custodianId: assigneeId,
-					assignedBy: assigner.id,
-				})
+				.values({ propertyId, custodianId: assigneeId, assignedBy: assigner.id })
 				.onConflictDoUpdate({
 					target: CustodianAssignments.propertyId,
 					set: { custodianId: assigneeId, assignedBy: assigner.id, assignedAt: new Date() },
 				})
 				.returning();
-
-			// If we re-assign to a new custodian, we must clear any old staff delegations
 			await db.delete(StaffAssignments).where(eq(StaffAssignments.propertyId, propertyId));
-
 			return res
 				.status(200)
 				.json({ success: true, message: "Property assigned to custodian successfully.", data: newAssignment });
 		}
 
-		// --- PROPERTY CUSTODIAN DELEGATING TO STAFF ---
+		// --- PROPERTY CUSTODIAN LOGIC (Separate from Admin) ---
 		if (assigner.role === "property_custodian") {
 			const [assignee] = await db.select().from(Users).where(eq(Users.id, assigneeId));
 			if (assignee?.role !== "staff") {
 				return res.status(400).json({ success: false, message: "Custodians can only delegate properties to Staff." });
 			}
-
-			// Security check: Ensure this property is actually assigned to the custodian trying to delegate it
 			const [isOwner] = await db
 				.select()
 				.from(CustodianAssignments)
@@ -223,24 +197,45 @@ export const assignOrReassignProperty = async (req, res, next) => {
 					.status(403)
 					.json({ success: false, message: "Forbidden: You are not the primary custodian for this property." });
 			}
+			const [existingStaffAssignment] = await db
+				.select()
+				.from(StaffAssignments)
+				.where(eq(StaffAssignments.propertyId, propertyId));
 
-			// Upsert logic for delegation
-			const [newDelegation] = await db
-				.insert(StaffAssignments)
-				.values({
-					propertyId,
-					staffId: assigneeId,
-					assignedByCustodianId: assigner.id,
-				})
-				.onConflictDoUpdate({
-					target: StaffAssignments.propertyId,
-					set: { staffId: assigneeId, assignedAt: new Date() },
-				})
-				.returning();
-
-			return res
-				.status(200)
-				.json({ success: true, message: "Property delegated to staff successfully.", data: newDelegation });
+			if (!existingStaffAssignment) {
+				// First-time assignment to staff
+				const [newDelegation] = await db
+					.insert(StaffAssignments)
+					.values({ propertyId, staffId: assigneeId, assignedByCustodianId: assigner.id })
+					.returning();
+				return res
+					.status(201)
+					.json({ success: true, message: "Property assigned to staff successfully.", data: newDelegation });
+			} else {
+				// Re-assignment, which requires approval
+				const [pendingRequestExists] = await db
+					.select()
+					.from(ReassignmentRequests)
+					.where(and(eq(ReassignmentRequests.propertyId, propertyId), eq(ReassignmentRequests.status, "pending")));
+				if (pendingRequestExists) {
+					return res.status(409).json({ success: false, message: "This property already has a pending reassignment request." });
+				}
+				const [newRequest] = await db
+					.insert(ReassignmentRequests)
+					.values({
+						propertyId,
+						fromStaffId: existingStaffAssignment.staffId,
+						toStaffId: assigneeId,
+						requestedByCustodianId: assigner.id,
+						status: "pending",
+					})
+					.returning();
+				return res.status(202).json({
+					success: true,
+					message: "Re-assignment request submitted. It is now pending approval from a Master Admin.",
+					data: newRequest,
+				});
+			}
 		}
 
 		return res.status(403).json({ success: false, message: "Forbidden: Your role cannot assign properties." });
@@ -248,6 +243,93 @@ export const assignOrReassignProperty = async (req, res, next) => {
 		next(error);
 	}
 };
+
+export const getPendingReassignments = async (req, res, next) => {
+	try {
+		// We join all tables to get a descriptive response
+		const fromStaff = aliasedTable(Users, "fromStaff");
+		const toStaff = aliasedTable(Users, "toStaff");
+		const custodian = aliasedTable(Users, "custodian");
+
+		const requests = await db
+			.select({
+				requestId: ReassignmentRequests.id,
+				property: getTableColumns(Properties),
+				fromStaff: getTableColumns(fromStaff),
+				toStaff: getTableColumns(toStaff),
+				requestedBy: getTableColumns(custodian),
+				status: ReassignmentRequests.status,
+				createdAt: ReassignmentRequests.createdAt,
+			})
+			.from(ReassignmentRequests)
+			.where(eq(ReassignmentRequests.status, "pending"))
+			.innerJoin(Properties, eq(ReassignmentRequests.propertyId, Properties.id))
+			.innerJoin(fromStaff, eq(ReassignmentRequests.fromStaffId, fromStaff.id))
+			.innerJoin(toStaff, eq(ReassignmentRequests.toStaffId, toStaff.id))
+			.innerJoin(custodian, eq(ReassignmentRequests.requestedByCustodianId, custodian.id));
+
+		res.status(200).json({ success: true, data: requests });
+	} catch (error) {
+		next(error);
+	}
+};
+
+// 2. Controller to approve or deny a request
+export const reviewReassignmentRequest = async (req, res, next) => {
+	const { requestId, newStatus } = req.body; // newStatus should be 'approved' or 'denied'
+	const masterAdminId = req.user.id;
+
+	if (!requestId || !["approved", "denied"].includes(newStatus)) {
+		return res
+			.status(400)
+			.json({ success: false, message: "Request ID and a valid status ('approved' or 'denied') are required." });
+	}
+
+	try {
+		const result = await db.transaction(async (tx) => {
+			// Find the request and lock it for update
+			const [request] = await tx
+				.select()
+				.from(ReassignmentRequests)
+				.where(eq(ReassignmentRequests.id, requestId))
+				.for("update");
+
+			if (!request) {
+				tx.rollback();
+				return res.status(404).json({ success: false, message: "Request not found." });
+			}
+			if (request.status !== "pending") {
+				tx.rollback();
+				return res.status(409).json({ success: false, message: "This request has already been reviewed." });
+			}
+
+			// If approved, update the actual staff assignment
+			if (newStatus === "approved") {
+				await tx
+					.update(StaffAssignments)
+					.set({ staffId: request.toStaffId })
+					.where(eq(StaffAssignments.propertyId, request.propertyId));
+			}
+
+			// Update the request itself to mark it as reviewed
+			const [updatedRequest] = await tx
+				.update(ReassignmentRequests)
+				.set({
+					status: newStatus,
+					reviewedByMasterAdminId: masterAdminId,
+					reviewedAt: new Date(),
+				})
+				.where(eq(ReassignmentRequests.id, requestId))
+				.returning();
+
+			return res.status(200).json({ success: true, message: `Request has been ${newStatus}.`, data: updatedRequest });
+		});
+		return result;
+	} catch (error) {
+		next(error);
+	}
+};
+
 export const getAssignedProperties = async (req, res, next) => {
 	try {
 		const userId = parseInt(req.params.userId, 10);
@@ -270,7 +352,6 @@ export const getAssignedProperties = async (req, res, next) => {
 					id: Properties.id,
 					propertyNo: Properties.propertyNo,
 					description: Properties.description,
-					qrCode: Properties.qrCode,
 				})
 				.from(CustodianAssignments)
 				.innerJoin(Properties, eq(CustodianAssignments.propertyId, Properties.id))
@@ -281,7 +362,6 @@ export const getAssignedProperties = async (req, res, next) => {
 					id: Properties.id,
 					propertyNo: Properties.propertyNo,
 					description: Properties.description,
-					qrCode: Properties.qrCode,
 				})
 				.from(StaffAssignments)
 				.innerJoin(Properties, eq(StaffAssignments.propertyId, Properties.id))
@@ -324,13 +404,6 @@ export const deleteProperty = async (req, res, next) => {
 				message: "This property is assigned to a custodian. Are you sure you want to delete it?",
 				requiresConfirmation: true,
 			});
-		}
-
-		// 2. No need to manually delete assignments. The database's "ON DELETE CASCADE" handles it.
-
-		// Delete the associated QR Code
-		if (existingProperty.qrId) {
-			await deleteQrCode(existingProperty.qrId);
 		}
 
 		// 3. Delete the property itself. The cascade will clean up the rest.
@@ -387,7 +460,6 @@ export const getProperty = async (req, res) => {
 			quantity: Properties.quantity,
 			value: Properties.value,
 			serialNo: Properties.serialNo,
-			qrCode: Properties.qrCode,
 		})
 		.from(Properties)
 		.where(eq(Properties.id, Number(id)));
