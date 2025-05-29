@@ -9,6 +9,8 @@ import {
 	getPropertyByScanner,
 	updateProperty,
 	getPrintableQr,
+	getPendingReassignments,
+	reviewReassignmentRequest,
 } from "../controllers/properties.controller.js";
 import authorize from "../middleware/auth.middleware.js";
 import checkRole from "../middleware/checkRole.middleware.js";
@@ -67,4 +69,8 @@ propertiesRouter.delete("/:id", checkRole(["admin", "master_admin"]), deleteProp
 // But keeping it as is for now. Placed here as it's highly specific.
 propertiesRouter.get("/scan/:id", getPropertyByScanner); // Assuming scanner has its own auth method outside of standard user roles
 
+propertiesRouter.get("/reassignments/pending", authorize, checkRole(["master_admin"]), getPendingReassignments);
+propertiesRouter.post("/reassignments/review", authorize, checkRole(["master_admin"]), reviewReassignmentRequest);
+
 export default propertiesRouter;
+
