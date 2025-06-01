@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, timestamp, text } from "drizzle-orm/pg-core";
 import { Users } from "./users.model.js";
 import { Properties } from "./properties.model.js";
 
@@ -15,5 +15,6 @@ export const CustodianAssignments = pgTable("custodian_assignments", {
 	assignedBy: integer("assigned_by") // The Admin who assigned it
 		.references(() => Users.id)
 		.notNull(),
+	assigned_department: text("assigned_department").notNull(), // The department of the custodian
 	assignedAt: timestamp("assigned_at").defaultNow().notNull(),
 });

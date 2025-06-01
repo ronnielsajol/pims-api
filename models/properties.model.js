@@ -8,6 +8,7 @@ export const Properties = pgTable("properties", {
 	quantity: text("quantity"),
 	value: text("value"),
 	serialNo: text("serial_no"),
+	location_detail: text("location_detail"),
 
 	createdAt: timestamp("created_at").defaultNow().notNull(),
 	updatedAt: timestamp("updated_at").defaultNow(),

@@ -12,7 +12,7 @@ export const getAllProperties = async (req, res, next) => {
 	try {
 		const user = req.user;
 
-		// --- ADMIN VIEW (CORRECTED) ---
+		// --- ADMIN VIEW  ---
 		// Shows the property and the CUSTODIAN it is assigned to.
 		if (user.role === "master_admin" || user.role === "admin") {
 			// 1. Correctly define the alias for the Users table BEFORE the query
@@ -24,17 +24,23 @@ export const getAllProperties = async (req, res, next) => {
 					...getTableColumns(Properties),
 					// 2. Use the alias to select the custodian's name
 					assignedTo: custodianUser.name,
+					assignedDepartment: CustodianAssignments.assigned_department,
+					reassignmentStatus: ReassignmentRequests.status,
 				})
 				.from(Properties)
 				.leftJoin(CustodianAssignments, eq(Properties.id, CustodianAssignments.propertyId))
 				// 3. Use the alias in the join condition
 				.leftJoin(custodianUser, eq(CustodianAssignments.custodianId, custodianUser.id))
+				.leftJoin(
+					ReassignmentRequests,
+					and(eq(Properties.id, ReassignmentRequests.propertyId), eq(ReassignmentRequests.status, "pending"))
+				)
 				.orderBy(Properties.id);
 
 			return res.status(200).json({ success: true, data: properties });
 		}
 
-		// --- CUSTODIAN VIEW (No changes, was already correct) ---
+		// --- CUSTODIAN VIEW ---
 		if (user.role === "property_custodian") {
 			const custodianUser = aliasedTable(Users, "custodian");
 			const staffUser = aliasedTable(Users, "staff");
@@ -43,6 +49,7 @@ export const getAllProperties = async (req, res, next) => {
 				.select({
 					...getTableColumns(Properties),
 					assignedTo: sql`COALESCE(${staffUser.name}, ${custodianUser.name})`,
+					assignedDepartment: CustodianAssignments.assigned_department,
 					reassignmentStatus: ReassignmentRequests.status,
 				})
 				.from(CustodianAssignments)
@@ -59,7 +66,6 @@ export const getAllProperties = async (req, res, next) => {
 			return res.status(200).json({ success: true, data: properties });
 		}
 
-		// --- STAFF VIEW (No changes, was already correct) ---
 		if (user.role === "staff") {
 			const properties = await db
 				.select({
@@ -81,14 +87,12 @@ export const addProperty = async (req, res, next) => {
 	try {
 		const { property } = req.body;
 
-		// 1. Validate required fields
 		if (!property?.propertyNo || !property?.description || !property?.quantity || !property?.value || !property?.serialNo) {
 			const error = new Error("Missing required fields");
 			error.status = 400;
 			throw error;
 		}
 
-		// 2. Insert the new property into the database
 		const [newProperty] = await db
 			.insert(Properties)
 			.values({
@@ -173,12 +177,24 @@ export const assignOrReassignProperty = async (req, res, next) => {
 			if (assignee?.role !== "property_custodian") {
 				return res.status(400).json({ success: false, message: "Admins can only assign properties to Property Custodians." });
 			}
+
+			if (!assignee.department) {
+				return res.status(400).json({
+					success: false,
+					message: `Custodian '${assignee.name}' does not have a department assigned. Please assign a department to the custodian first.`,
+				});
+			}
 			const [newAssignment] = await db
 				.insert(CustodianAssignments)
-				.values({ propertyId, custodianId: assigneeId, assignedBy: assigner.id })
+				.values({ propertyId, custodianId: assigneeId, assignedBy: assigner.id, assigned_department: assignee.department })
 				.onConflictDoUpdate({
 					target: CustodianAssignments.propertyId,
-					set: { custodianId: assigneeId, assignedBy: assigner.id, assignedAt: new Date() },
+					set: {
+						custodianId: assigneeId,
+						assignedBy: assigner.id,
+						assigned_department: assignee.department,
+						assignedAt: new Date(),
+					},
 				})
 				.returning();
 			await db.delete(StaffAssignments).where(eq(StaffAssignments.propertyId, propertyId));
@@ -516,5 +532,53 @@ export const getPrintableQr = async (req, res, next) => {
 		res.status(200).json({ success: true, data: printableData });
 	} catch (error) {
 		next(error); // Pass errors to your middleware
+	}
+};
+
+export const updatePropertyLocationDetail = async (req, res, next) => {
+	try {
+		const propertyId = parseInt(req.params.propertyId, 10);
+		if (isNaN(propertyId)) {
+			return res.status(400).json({ success: false, message: "Invalid Property ID." });
+		}
+
+		const { location_detail } = req.body;
+		if (typeof location_detail !== "string" || location_detail.trim() === "") {
+			// Basic validation
+			return res.status(400).json({ success: false, message: "Location detail is required." });
+		}
+
+		const custodian = req.user; // Logged-in user
+
+		// Authorization: Ensure this custodian is assigned this property
+		const [assignment] = await db
+			.select()
+			.from(CustodianAssignments)
+			.where(and(eq(CustodianAssignments.propertyId, propertyId), eq(CustodianAssignments.custodianId, custodian.id)));
+
+		if (!assignment) {
+			return res
+				.status(403)
+				.json({ success: false, message: "Forbidden: You are not assigned this property or it does not exist." });
+		}
+
+		// Update the property's location detail
+		const [updatedProperty] = await db
+			.update(Properties)
+			.set({ location_detail: location_detail.trim(), updatedAt: new Date() })
+			.where(eq(Properties.id, propertyId))
+			.returning();
+
+		if (!updatedProperty) {
+			return res.status(404).json({ success: false, message: "Property not found for update." });
+		}
+
+		return res.status(200).json({
+			success: true,
+			message: "Property location detail updated successfully.",
+			data: updatedProperty,
+		});
+	} catch (error) {
+		next(error);
 	}
 };

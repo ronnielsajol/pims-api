@@ -11,6 +11,7 @@ import {
 	getPrintableQr,
 	getPendingReassignments,
 	reviewReassignmentRequest,
+	updatePropertyLocationDetail,
 } from "../controllers/properties.controller.js";
 import authorize from "../middleware/auth.middleware.js";
 import checkRole from "../middleware/checkRole.middleware.js";
@@ -62,6 +63,9 @@ propertiesRouter.get(
 // UPDATE a property
 propertiesRouter.patch("/update/:id", checkRole(["admin", "master_admin"]), updateProperty);
 
+//UPDATE a property's location detail
+propertiesRouter.patch("/:propertyId/location-detail", checkRole(["property_custodian"]), updatePropertyLocationDetail);
+
 // DELETE a property
 propertiesRouter.delete("/:id", checkRole(["admin", "master_admin"]), deleteProperty);
 
@@ -73,4 +77,3 @@ propertiesRouter.get("/reassignments/pending", authorize, checkRole(["master_adm
 propertiesRouter.post("/reassignments/review", authorize, checkRole(["master_admin"]), reviewReassignmentRequest);
 
 export default propertiesRouter;
-
