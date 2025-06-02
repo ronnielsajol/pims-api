@@ -542,7 +542,8 @@ export const updatePropertyLocationDetail = async (req, res, next) => {
 			return res.status(400).json({ success: false, message: "Invalid Property ID." });
 		}
 
-		const { location_detail } = req.body;
+		const { property } = req.body;
+		const location_detail = property?.location_detail;
 		if (typeof location_detail !== "string" || location_detail.trim() === "") {
 			// Basic validation
 			return res.status(400).json({ success: false, message: "Location detail is required." });
