@@ -8,7 +8,7 @@ export const reassignmentStatusEnum = pgEnum("reassignment_status", ["pending", 
 export const ReassignmentRequests = pgTable("reassignment_requests", {
 	id: serial("id").primaryKey(),
 	propertyId: integer("property_id")
-		.references(() => Properties.id)
+		.references(() => Properties.id, { onDelete: "cascade" })
 		.notNull(),
 
 	// The staff member who currently has the property

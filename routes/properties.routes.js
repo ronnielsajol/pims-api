@@ -8,10 +8,11 @@ import {
 	getProperty,
 	getPropertyByScanner,
 	updateProperty,
-	getPrintableQr,
 	getPendingReassignments,
 	reviewReassignmentRequest,
 	updatePropertyLocationDetail,
+	getPropertyWithDetails,
+	updatePropertyDetails,
 } from "../controllers/properties.controller.js";
 import authorize from "../middleware/auth.middleware.js";
 import checkRole from "../middleware/checkRole.middleware.js";
@@ -53,15 +54,14 @@ propertiesRouter.get(
 // This MUST be defined after the keyword routes above.
 propertiesRouter.get("/:id", checkRole(["admin", "master_admin", "property_custodian"]), getProperty);
 
-// GET a printable QR code for a specific property
-propertiesRouter.get(
-	"/:id/printable-qr",
-	checkRole(["admin", "master_admin", "property_custodian", "staff"]),
-	getPrintableQr
-);
+//GET property's details
+propertiesRouter.get("/:id/details", checkRole(["admin", "master_admin"]), getPropertyWithDetails);
 
 // UPDATE a property
 propertiesRouter.patch("/update/:id", checkRole(["admin", "master_admin"]), updateProperty);
+
+// UPDATE a property's details
+propertiesRouter.patch("/:id/details", checkRole(["admin", "master_admin"]), updatePropertyDetails);
 
 //UPDATE a property's location detail
 propertiesRouter.patch("/:propertyId/location-detail", checkRole(["property_custodian"]), updatePropertyLocationDetail);

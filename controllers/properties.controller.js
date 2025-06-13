@@ -3,10 +3,10 @@ import { db } from "../database/supabase.js";
 import { Properties } from "../models/properties.model.js";
 import { Users } from "../models/users.model.js";
 import { SCANNER_SECRET_KEY } from "../config/env.js";
-import { generatePrintableQrFromUrl } from "../lib/generatePrintableQrCode.js";
 import { CustodianAssignments } from "../models/custodian-assignments.model.js";
 import { ReassignmentRequests } from "../models/reassignment-requests.model.js";
 import { StaffAssignments } from "../models/staff-assignments.model.js";
+import { PropertyDetails } from "../models/property-details.model.js";
 
 export const getAllProperties = async (req, res, next) => {
 	try {
@@ -93,22 +93,35 @@ export const addProperty = async (req, res, next) => {
 			throw error;
 		}
 
-		const [newProperty] = await db
-			.insert(Properties)
-			.values({
-				propertyNo: property.propertyNo,
-				description: property.description,
-				quantity: property.quantity,
-				value: property.value,
-				serialNo: property.serialNo,
-			})
-			.returning();
+		const newPropertyWithDetails = await db.transaction(async (tx) => {
+			// 1. Insert into the main Properties table
+			const [newProperty] = await tx
+				.insert(Properties)
+				.values({
+					propertyNo: property.propertyNo,
+					description: property.description,
+					quantity: property.quantity,
+					value: property.value,
+					serialNo: property.serialNo || null,
+					location_detail: property.location_detail || null,
+				})
+				.returning();
 
-		// 3. Return a success response with the newly created property data
+			// 2. Insert the corresponding (initially empty) details row
+			// Note: We use the ID from the property we just created.
+			await tx.insert(PropertyDetails).values({
+				propertyId: newProperty.id,
+				// All other fields will default to NULL (or "" if you prefer, but NULL is better for non-string types)
+			});
+
+			// 3. Return the main property object
+			return newProperty;
+		});
+
 		res.status(201).json({
 			success: true,
-			message: "Property added successfully",
-			data: { property: newProperty },
+			message: "Property and its details record added successfully",
+			data: { property: newPropertyWithDetails },
 		});
 	} catch (error) {
 		next(error);
@@ -160,6 +173,118 @@ export const updateProperty = async (req, res, next) => {
 			success: true,
 			message: "Property updated successfully",
 			data: { property: updated },
+		});
+	} catch (error) {
+		next(error);
+	}
+};
+
+export const getPropertyWithDetails = async (req, res, next) => {
+	try {
+		const propertyId = parseInt(req.params.id, 10);
+		if (isNaN(propertyId)) {
+			return res.status(400).json({ success: false, message: "Invalid Property ID." });
+		}
+
+		const custodianUser = aliasedTable(Users, "custodian");
+		const staffUser = aliasedTable(Users, "staff");
+
+		// Fetch both the main property and its details in one go
+		const [result] = await db
+			.select({
+				property: getTableColumns(Properties),
+				details: getTableColumns(PropertyDetails),
+				assignedTo: sql`COALESCE(${staffUser.name}, ${custodianUser.name})`,
+				assignedDepartment: CustodianAssignments.assigned_department,
+			})
+			.from(Properties)
+			.where(eq(Properties.id, propertyId))
+			.leftJoin(PropertyDetails, eq(Properties.id, PropertyDetails.propertyId))
+			.leftJoin(CustodianAssignments, eq(Properties.id, CustodianAssignments.propertyId))
+			.leftJoin(custodianUser, eq(CustodianAssignments.custodianId, custodianUser.id))
+			.leftJoin(StaffAssignments, eq(Properties.id, StaffAssignments.propertyId))
+			.leftJoin(staffUser, eq(StaffAssignments.staffId, staffUser.id));
+
+		if (!result) {
+			return res.status(404).json({ success: false, message: "Property not found." });
+		}
+
+		// The result will be an object like { properties: {...}, property_details: {...} }
+		// Let's combine them into a single, clean object for the frontend.
+		const combinedData = {
+			...result.property,
+			details: result.details || null,
+			assignedTo: result.assignedTo || null,
+			assignedDepartment: result.assignedDepartment || null,
+		};
+
+		return res.status(200).json({ success: true, data: combinedData });
+	} catch (error) {
+		next(error);
+	}
+};
+
+export const updatePropertyDetails = async (req, res, next) => {
+	try {
+		const propertyId = parseInt(req.params.id, 10);
+		if (isNaN(propertyId)) {
+			return res.status(400).json({ success: false, message: "Invalid Property ID." });
+		}
+
+		const { details } = req.body; // Expecting a 'details' object in the body
+		if (!details || typeof details !== "object" || Object.keys(details).length === 0) {
+			return res.status(400).json({ success: false, message: "Details object is required." });
+		}
+
+		// Prepare fields to update, only including those provided in the request
+		const updateValues = {
+			updatedAt: new Date(), // Always update this timestamp
+		};
+
+		// List of allowed fields to prevent malicious data injection
+		const allowedFields = [
+			"article",
+			"oldPropertyNo",
+			"unitOfMeasure",
+			"acquisitionDate",
+			"condition",
+			"remarks",
+			"pupBranch",
+			"assetType",
+			"fundCluster",
+			"poNo",
+			"invoiceDate",
+			"invoiceNo",
+		];
+
+		for (const field of allowedFields) {
+			if (details[field] !== undefined) {
+				// For date fields, ensure they are valid dates or null
+				if (
+					["acquisitionDate", "invoiceDate"].includes(field) &&
+					details[field] !== null &&
+					!new Date(details[field]).getTime()
+				) {
+					continue; // Skip invalid date values
+				}
+				updateValues[field] = details[field];
+			}
+		}
+
+		const [updatedDetails] = await db
+			.update(PropertyDetails)
+			.set(updateValues)
+			.where(eq(PropertyDetails.propertyId, propertyId))
+			.returning();
+
+		if (!updatedDetails) {
+			return res.status(404).json({ success: false, message: "Property details not found for this ID." });
+		}
+
+		return res.status(200).json({
+			success: true,
+			message: "Property details updated successfully.",
+			data: updatedDetails,
 		});
 	} catch (error) {
 		next(error);
@@ -493,46 +618,6 @@ export const getProperty = async (req, res) => {
 		success: true,
 		data: property,
 	});
-};
-
-export const getPrintableQr = async (req, res, next) => {
-	try {
-		const { id } = req.params;
-
-		if (!id) {
-			const error = new Error("Property ID is required.");
-			error.status = 400;
-			throw error;
-		}
-
-		// 1. Fetch the property from the database
-		const [property] = await db
-			.select({
-				qrCode: Properties.qrCode,
-			})
-			.from(Properties)
-			.where(eq(Properties.id, Number(id)));
-
-		if (!property) {
-			const error = new Error("Property not found.");
-			error.status = 404;
-			throw error;
-		}
-
-		if (!property.qrCode || !property.qrCode.startsWith("http")) {
-			const error = new Error("A valid QR code URL does not exist for this property.");
-			error.status = 404;
-			throw error;
-		}
-
-		// 2. Pass the URL to the helper function to get printable data
-		const printableData = await generatePrintableQrFromUrl(property.qrCode);
-
-		// 3. Return the printable data
-		res.status(200).json({ success: true, data: printableData });
-	} catch (error) {
-		next(error); // Pass errors to your middleware
-	}
 };
 
 export const updatePropertyLocationDetail = async (req, res, next) => {
