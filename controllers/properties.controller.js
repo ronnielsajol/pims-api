@@ -209,8 +209,6 @@ export const getPropertyWithDetails = async (req, res, next) => {
 			return res.status(404).json({ success: false, message: "Property not found." });
 		}
 
-		// The result will be an object like { properties: {...}, property_details: {...} }
-		// Let's combine them into a single, clean object for the frontend.
 		const combinedData = {
 			...result.property,
 			details: result.details || null,
