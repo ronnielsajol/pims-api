@@ -26,6 +26,7 @@ export const getAllProperties = async (req, res, next) => {
 					assignedTo: custodianUser.name,
 					assignedDepartment: CustodianAssignments.assigned_department,
 					reassignmentStatus: ReassignmentRequests.status,
+					totalValue: sql`CAST(properties.quantity AS numeric) * CAST(properties.value AS numeric)`,
 				})
 				.from(Properties)
 				.leftJoin(CustodianAssignments, eq(Properties.id, CustodianAssignments.propertyId))
@@ -196,6 +197,7 @@ export const getPropertyWithDetails = async (req, res, next) => {
 				details: getTableColumns(PropertyDetails),
 				assignedTo: sql`COALESCE(${staffUser.name}, ${custodianUser.name})`,
 				assignedDepartment: CustodianAssignments.assigned_department,
+				totalValue: sql`CAST(properties.quantity AS numeric) * CAST(properties.value AS numeric)`,
 			})
 			.from(Properties)
 			.where(eq(Properties.id, propertyId))
@@ -214,6 +216,7 @@ export const getPropertyWithDetails = async (req, res, next) => {
 			details: result.details || null,
 			assignedTo: result.assignedTo || null,
 			assignedDepartment: result.assignedDepartment || null,
+			totalValue: result.totalValue,
 		};
 
 		return res.status(200).json({ success: true, data: combinedData });
