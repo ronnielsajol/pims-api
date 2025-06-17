@@ -7,7 +7,6 @@ export const PropertyDetails = pgTable("property_details", {
 		.primaryKey()
 		.references(() => Properties.id, { onDelete: "cascade" }),
 
-	// Your new columns - using text/varchar for flexibility and date for date fields
 	article: text("article"), // "Article/Item"
 	oldPropertyNo: varchar("old_property_no", { length: 255 }),
 	unitOfMeasure: varchar("unit_of_measure", { length: 100 }),
@@ -15,6 +14,7 @@ export const PropertyDetails = pgTable("property_details", {
 	condition: text("condition"),
 	remarks: text("remarks"),
 	pupBranch: text("pup_branch"), // Assuming PUP Branch is a text field
+	duration: text("duration"), // "Duration of Use"
 	assetType: text("asset_type"), // "Type of Asset"
 	fundCluster: varchar("fund_cluster", { length: 255 }),
 	poNo: varchar("po_no", { length: 255 }), // "PO. Number"

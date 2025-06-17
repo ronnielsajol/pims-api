@@ -162,6 +162,7 @@ export const updateProperty = async (req, res, next) => {
 				value: property.value,
 				serialNo: property.serialNo,
 				updatedAt: new Date(),
+				category: property.category || "Annex A", // Default to "Annex A" if not provided
 			})
 			.where(eq(Properties.id, Number(id)));
 
@@ -256,6 +257,7 @@ export const updatePropertyDetails = async (req, res, next) => {
 			"poNo",
 			"invoiceDate",
 			"invoiceNo",
+			"duration",
 		];
 
 		for (const field of allowedFields) {
