@@ -125,6 +125,21 @@ export const addProperty = async (req, res, next) => {
 			data: { property: newPropertyWithDetails },
 		});
 	} catch (error) {
+		if (error.code === "23505") {
+			let duplicateField = "An unknown field";
+			console.log(error);
+			if (error.constraint_name === "properties_property_no_unique") {
+				duplicateField = "Property Number";
+			} else if (error.constraint_name === "properties_serial_no_unique") {
+				duplicateField = "Serial Number";
+			}
+
+			return res.status(409).json({
+				success: false,
+				message: `A property with this ${duplicateField} already exists.`,
+			});
+		}
+
 		next(error);
 	}
 };
