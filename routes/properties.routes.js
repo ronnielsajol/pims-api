@@ -13,11 +13,15 @@ import {
 	updatePropertyLocationDetail,
 	getPropertyWithDetails,
 	updatePropertyDetails,
+	generateReport,
+	previewReportTemplate,
 } from "../controllers/properties.controller.js";
 import authorize from "../middleware/auth.middleware.js";
 import checkRole from "../middleware/checkRole.middleware.js";
 
 const propertiesRouter = Router();
+
+propertiesRouter.get("/report/preview", previewReportTemplate);
 
 // All routes below require the user to be authenticated.
 propertiesRouter.use(authorize);
@@ -45,6 +49,10 @@ propertiesRouter.get(
 	checkRole(["admin", "master_admin", "property_custodian", "staff"]),
 	getAssignedProperties
 );
+
+// GET a PDF inventory report
+// Accessible by admins and custodians to generate reports for their scope.
+propertiesRouter.get("/report", checkRole(["admin", "master_admin", "property_custodian"]), generateReport);
 
 // =================================================================
 // 2. PARAMETERIZED ROUTES (More general routes last)

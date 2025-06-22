@@ -7,6 +7,11 @@ import { CustodianAssignments } from "../models/custodian-assignments.model.js";
 import { ReassignmentRequests } from "../models/reassignment-requests.model.js";
 import { StaffAssignments } from "../models/staff-assignments.model.js";
 import { PropertyDetails } from "../models/property-details.model.js";
+import fs from "fs/promises";
+import { fileURLToPath } from "url";
+import path from "path";
+import puppeteer from "puppeteer";
+import ejs from "ejs";
 
 export const getAllProperties = async (req, res, next) => {
 	try {
@@ -699,5 +704,170 @@ export const updatePropertyLocationDetail = async (req, res, next) => {
 		});
 	} catch (error) {
 		next(error);
+	}
+};
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+export const generateReport = async (req, res) => {
+	const user = req.user;
+
+	if (!["master_admin", "admin", "property_custodian"].includes(user.role)) {
+		return res.status(403).json({ message: "Forbidden: You do not have permission to generate this report." });
+	}
+
+	if (user.role === "property_custodian" && !user.id) {
+		return res.status(400).json({ message: "User ID is required for property custodian reports." });
+	}
+
+	let browser;
+	try {
+		// --- Data Fetching ---
+		const custodian = aliasedTable(Users, "custodian");
+		const staff = aliasedTable(Users, "staff");
+		let reportDataQuery = db
+			.select({
+				propertyNo: Properties.propertyNo,
+				description: Properties.description,
+				quantity: Properties.quantity,
+				value: Properties.value,
+				serialNo: Properties.serialNo,
+				locationDetail: Properties.location_detail,
+				article: PropertyDetails.article,
+				oldPropertyNo: PropertyDetails.oldPropertyNo,
+				unitOfMeasure: PropertyDetails.unitOfMeasure,
+				acquisitionDate: PropertyDetails.acquisitionDate,
+				condition: PropertyDetails.condition,
+				remarks: PropertyDetails.remarks,
+				pupBranch: PropertyDetails.pupBranch,
+				assetType: PropertyDetails.assetType,
+				fundCluster: PropertyDetails.fundCluster,
+				poNo: PropertyDetails.poNo,
+				invoiceDate: PropertyDetails.invoiceDate,
+				invoiceNo: PropertyDetails.invoiceNo,
+				totalValue:
+					sql`CASE WHEN ${Properties.quantity} IS NOT NULL AND ${Properties.value} IS NOT NULL THEN CAST(${Properties.quantity} AS numeric) * CAST(${Properties.value} AS numeric) ELSE 0 END`.as(
+						"totalValue"
+					),
+				custodianName: custodian.name,
+				assignedDepartment: CustodianAssignments.assigned_department,
+				staffName: staff.name,
+			})
+			.from(Properties)
+			.leftJoin(PropertyDetails, eq(Properties.id, PropertyDetails.propertyId))
+			.leftJoin(CustodianAssignments, eq(Properties.id, CustodianAssignments.propertyId))
+			.leftJoin(custodian, eq(CustodianAssignments.custodianId, custodian.id))
+			.leftJoin(StaffAssignments, eq(Properties.id, StaffAssignments.propertyId))
+			.leftJoin(staff, eq(StaffAssignments.staffId, staff.id));
+
+		if (user.role === "property_custodian") {
+			reportDataQuery = reportDataQuery.where(eq(CustodianAssignments.custodianId, user.id));
+		}
+		const reportData = await reportDataQuery;
+
+		if (reportData.length === 0) {
+			return res.status(404).json({ message: "No properties found to generate a report." });
+		}
+
+		// --- PDF Generation with Puppeteer ---
+		const templatePath = path.join(__dirname, "../templates/report-template.ejs");
+		const html = await ejs.renderFile(templatePath, { reportData, user });
+
+		browser = await puppeteer.launch({
+			headless: "new",
+			args: ["--no-sandbox", "--disable-setuid-sandbox"],
+		});
+		const page = await browser.newPage();
+
+		await page.setContent(html, { waitUntil: "load" });
+
+		const pdfBuffer = await page.pdf({
+			format: "A3",
+			landscape: true,
+			printBackground: true,
+			margin: { top: "20px", right: "30px", bottom: "20px", left: "30px" },
+		});
+
+		const filename = `PIMS_Inventory_Report_${new Date().toISOString().slice(0, 10)}.pdf`;
+
+		res.writeHead(200, {
+			"Content-Type": "application/pdf",
+			"Content-Disposition": `attachment; filename="${filename}"`,
+			"Content-Length": pdfBuffer.length,
+		});
+
+		// Send the raw buffer and end the response
+		res.end(pdfBuffer);
+	} catch (error) {
+		console.error("Error generating PDF report with Puppeteer:", error);
+		// Ensure we don't try to send headers twice if an error occurs after they're partially sent
+		if (!res.headersSent) {
+			res.status(500).json({ message: "Failed to generate report due to a server error." });
+		}
+	} finally {
+		if (browser) {
+			await browser.close();
+		}
+	}
+};
+
+export const previewReportTemplate = async (req, res) => {
+	try {
+		// Create a mock user object for the template header
+		const mockUser = {
+			role: "property_custodian",
+			department: "Sample Department Preview",
+		};
+
+		// Create a few rows of mock data to populate the table
+		const mockReportData = [
+			{
+				article: "Laptop",
+				description: "Dell XPS 15",
+				propertyNo: "2025-001",
+				oldPropertyNo: "N/A",
+				unitOfMeasure: "unit",
+				quantity: "1",
+				value: "150000.00",
+				totalValue: "150000.00",
+				acquisitionDate: new Date(),
+				condition: "Good",
+				serialNo: "ABC123XYZ",
+				remarks: "For development",
+				assignedDepartment: "ICTO",
+				locationDetail: "Workspace A",
+				custodianName: "Ronniel Custodian",
+				staffName: "Sample Staff",
+				pupBranch: "Main",
+				assetType: "ICT Equipment",
+				fundCluster: "101",
+				poNo: "PO-987",
+				invoiceDate: new Date(),
+				invoiceNo: "INV-654",
+			},
+			{
+				article: "Monitor",
+				description: "LG 27-inch 4K",
+				propertyNo: "2025-002",
+				// other fields can be null to test blank cells
+			},
+		];
+
+		// Define the path to your EJS template
+		const templatePath = path.join(__dirname, "../templates/report-template.ejs");
+
+		// Render the template with the mock data
+		const html = await ejs.renderFile(templatePath, {
+			reportData: mockReportData,
+			user: mockUser,
+		});
+
+		// Send the response as HTML
+		res.setHeader("Content-Type", "text/html");
+		res.send(html);
+	} catch (error) {
+		console.error("Error generating report preview:", error);
+		res.status(500).json({ message: "Failed to generate preview." });
 	}
 };

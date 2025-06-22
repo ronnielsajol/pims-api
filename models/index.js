@@ -5,3 +5,4 @@ export * from "./log.model";
 export * from "./properties.model";
 export * from "./reassignment-requests.model";
 export * from "./property-details.model";
+export * from "./print-jobs.model";

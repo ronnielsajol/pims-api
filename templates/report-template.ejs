@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<title>Inventory Count Form</title>
+		<style>
+			/* General document styles */
+			body {
+				font-family: Arial, sans-serif;
+				font-size: 12px; /* Base font size for the document */
+				margin: 0;
+			}
+			.container {
+				padding: 20px 20px;
+			}
+			/* Header styles */
+			.report-header {
+				text-align: center;
+				margin-bottom: 20px;
+			}
+			.report-header h1 {
+				font-size: 14px;
+				margin: 0;
+			}
+			.report-header h2 {
+				font-size: 12px;
+				margin: 0;
+				font-weight: normal;
+			}
+			.report-header h3 {
+				font-size: 10px;
+				margin: 0;
+				font-weight: normal;
+			}
+			.report-title {
+				text-align: left;
+				font-size: 12px;
+				font-weight: bold;
+				margin-bottom: 15px;
+			}
+			.opn {
+				max-width: 80px;
+				text-wrap: wrap;
+			}
+			/* Table styles */
+			table {
+				width: 100%;
+				border-collapse: collapse;
+			}
+			th,
+			td {
+				border: 1px solid #444;
+				padding: 4px;
+				text-align: left;
+				word-wrap: break-word;
+			}
+			th {
+				background-color: #9dc9ed;
+				font-weight: bold;
+				text-align: center;
+			}
+			/* Styles for printing */
+			@media print {
+				body {
+					-webkit-print-color-adjust: exact; /* Ensures background colors print */
+				}
+				/* These are crucial for proper pagination */
+				thead {
+					display: table-header-group; /* Repeats table header on each page */
+				}
+				tbody tr {
+					page-break-inside: avoid; /* Prevents rows from splitting across pages */
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<div class="container">
+			<header class="report-header">
+				<h1>POLYTECHNIC UNIVERSITY OF THE PHILIPPINES</h1>
+				<h2>INVENTORY COUNT FORM</h2>
+				<% if (user.role === 'property_custodian' && user.department) { %>
+				<h3><%= user.department %></h3>
+				<% } %>
+			</header>
+
+			<table>
+				<thead>
+					<tr>
+						<th>Description</th>
+						<th>Property Number</th>
+						<th class="opn">Old Property Number</th>
+						<th>Unit of Measure</th>
+						<th>Quantity</th>
+						<th>Value</th>
+						<th>Total Value</th>
+						<th>Acquisition Date</th>
+						<th>Condition</th>
+						<th>Serial Number</th>
+						<th>Remarks</th>
+						<th>Location</th>
+						<th>Accountable Person</th>
+						<th>PUP Branch</th>
+						<th>Asset Type</th>
+						<th>Fund Cluster</th>
+						<th>PO Number</th>
+						<th>Invoice Date</th>
+						<th>Invoice Number</th>
+					</tr>
+				</thead>
+				<tbody>
+					<% reportData.forEach(item => { %> <% let accountablePerson = ''; if (user.role === 'property_custodian') {
+					accountablePerson = item.staffName ?? ''; } else { accountablePerson = item.custodianName ?? ''; } %>
+					<tr>
+						<td><%= `${item.article ?? ''} ${item.description ?? ''}`.trim() %></td>
+						<td><%= item.propertyNo ?? '' %></td>
+						<td><%= item.oldPropertyNo ?? '' %></td>
+						<td style="text-align: center"><%= item.unitOfMeasure ?? '' %></td>
+						<td style="text-align: center"><%= item.quantity ?? '' %></td>
+						<td><%= item.value ? parseFloat(item.value).toFixed(2) : '' %></td>
+						<td><%= item.totalValue ? parseFloat(item.totalValue).toFixed(2) : '' %></td>
+						<td><%= item.acquisitionDate ? new Date(item.acquisitionDate).toLocaleDateString() : '' %></td>
+						<td><%= item.condition ?? '' %></td>
+						<td><%= item.serialNo ?? '' %></td>
+						<td><%= item.remarks ?? '' %></td>
+						<td><%= `${item.assignedDepartment ?? ''} ${item.locationDetail ?? ''}`.trim() %></td>
+						<td><%= accountablePerson %></td>
+						<td><%= item.pupBranch ?? '' %></td>
+						<td><%= item.assetType ?? '' %></td>
+						<td><%= item.fundCluster ?? '' %></td>
+						<td><%= item.poNo ?? '' %></td>
+						<td><%= item.invoiceDate ? new Date(item.invoiceDate).toLocaleDateString() : '' %></td>
+						<td><%= item.invoiceNo ?? '' %></td>
+					</tr>
+					<% }); %>
+				</tbody>
+			</table>
+		</div>
+	</body>
+</html>
