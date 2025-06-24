@@ -33,10 +33,10 @@ export const signUp = async (req, res, next) => {
 		});
 
 		const cookieOptions = {
-			httpOnly: true, // Prevents client-side JS from accessing the cookie
+			httpOnly: true,
 			expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // Set an expiration (e.g., 1 day)
-			secure: NODE_ENV === "production", // Only send over HTTPS in production
-			sameSite: "strict", // CSRF protection
+			secure: true,
+			sameSite: "none",
 		};
 
 		res.cookie("token", token, cookieOptions);
@@ -78,8 +78,8 @@ export const signIn = async (req, res, next) => {
 		const cookieOptions = {
 			httpOnly: true,
 			expires: new Date(Date.now() + 24 * 60 * 60 * 1000 * 7), // e.g., 7 days
-			secure: NODE_ENV === "production",
-			sameSite: "strict",
+			secure: true,
+			sameSite: "none",
 		};
 		res.cookie("token", token, cookieOptions);
 
@@ -98,8 +98,8 @@ export const signIn = async (req, res, next) => {
 export const signOut = (req, res) => {
 	res.clearCookie("token", {
 		httpOnly: true,
-		secure: process.env.NODE_ENV === "production",
-		sameSite: "strict",
+		secure: true,
+		sameSite: "none",
 		path: "/",
 	});
 
