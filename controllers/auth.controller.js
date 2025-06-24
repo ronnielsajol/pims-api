@@ -36,7 +36,7 @@ export const signUp = async (req, res, next) => {
 			httpOnly: true,
 			expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // Set an expiration (e.g., 1 day)
 			secure: true,
-			sameSite: "none",
+			sameSite: "lax",
 		};
 
 		res.cookie("token", token, cookieOptions);
@@ -79,7 +79,7 @@ export const signIn = async (req, res, next) => {
 			httpOnly: true,
 			expires: new Date(Date.now() + 24 * 60 * 60 * 1000 * 7), // e.g., 7 days
 			secure: true,
-			sameSite: "none",
+			sameSite: "lax",
 		};
 		res.cookie("token", token, cookieOptions);
 
@@ -99,7 +99,7 @@ export const signOut = (req, res) => {
 	res.clearCookie("token", {
 		httpOnly: true,
 		secure: true,
-		sameSite: "none",
+		sameSite: "lax",
 		path: "/",
 	});
 
