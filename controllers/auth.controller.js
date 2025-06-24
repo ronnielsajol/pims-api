@@ -32,11 +32,12 @@ export const signUp = async (req, res, next) => {
 			expiresIn: JWT_EXPIRES_IN,
 		});
 
+		// Fix: Use environment-based cookie options
 		const cookieOptions = {
 			httpOnly: true,
-			expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // Set an expiration (e.g., 1 day)
-			secure: true,
-			sameSite: "lax",
+			expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 1 day
+			secure: NODE_ENV === "production",
+			sameSite: NODE_ENV === "production" ? "none" : "lax",
 		};
 
 		res.cookie("token", token, cookieOptions);
@@ -75,12 +76,14 @@ export const signIn = async (req, res, next) => {
 			expiresIn: JWT_EXPIRES_IN,
 		});
 
+		// Fix: Use environment-based cookie options
 		const cookieOptions = {
 			httpOnly: true,
-			expires: new Date(Date.now() + 24 * 60 * 60 * 1000 * 7), // e.g., 7 days
-			secure: true,
-			sameSite: "lax",
+			expires: new Date(Date.now() + 24 * 60 * 60 * 1000 * 7), // 7 days
+			secure: NODE_ENV === "production",
+			sameSite: NODE_ENV === "production" ? "none" : "lax",
 		};
+
 		res.cookie("token", token, cookieOptions);
 
 		const { password: _, ...userToReturn } = user;
@@ -98,8 +101,8 @@ export const signIn = async (req, res, next) => {
 export const signOut = (req, res) => {
 	res.clearCookie("token", {
 		httpOnly: true,
-		secure: true,
-		sameSite: "lax",
+		secure: NODE_ENV === "production",
+		sameSite: NODE_ENV === "production" ? "none" : "lax",
 		path: "/",
 	});
 
