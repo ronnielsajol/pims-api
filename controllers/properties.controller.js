@@ -774,19 +774,37 @@ export const generateReport = async (req, res) => {
 		const templatePath = path.join(__dirname, "../templates/report-template.ejs");
 		const html = await ejs.renderFile(templatePath, { reportData, user });
 
-		browser = await puppeteer.launch({
+		const puppeteerOptions = {
 			headless: "new",
-			args: ["--no-sandbox", "--disable-setuid-sandbox"],
-		});
+			args: [
+				"--no-sandbox",
+				"--disable-setuid-sandbox",
+				"--disable-dev-shm-usage",
+				"--disable-accelerated-2d-canvas",
+				"--no-first-run",
+				"--no-zygote",
+				"--single-process", // This can help with memory issues
+				"--disable-gpu",
+				"--disable-web-security",
+				"--disable-features=VizDisplayCompositor",
+			],
+		};
+
+		console.log("Launching Puppeteer with options:", puppeteerOptions);
+		browser = await puppeteer.launch(puppeteerOptions);
+
 		const page = await browser.newPage();
 
-		await page.setContent(html, { waitUntil: "load" });
+		await page.setViewport({ width: 1920, height: 1080 });
+
+		await page.setContent(html, { waitUntil: "load", timeout: 30000 });
 
 		const pdfBuffer = await page.pdf({
 			format: "A3",
 			landscape: true,
 			printBackground: true,
 			margin: { top: "20px", right: "30px", bottom: "20px", left: "30px" },
+			timeout: 30000,
 		});
 
 		const filename = `PIMS_Inventory_Report_${new Date().toISOString().slice(0, 10)}.pdf`;
@@ -801,13 +819,23 @@ export const generateReport = async (req, res) => {
 		res.end(pdfBuffer);
 	} catch (error) {
 		console.error("Error generating PDF report with Puppeteer:", error);
+
+		if (error.message.includes("Failed to launch the browser process")) {
+			console.error("Browser launch failed. This might be due to missing system dependencies.");
+			console.error("Run: sudo apt-get install -y chromium-browser");
+			console.error("Or install the required dependencies listed in the Puppeteer troubleshooting guide.");
+		}
 		// Ensure we don't try to send headers twice if an error occurs after they're partially sent
 		if (!res.headersSent) {
 			res.status(500).json({ message: "Failed to generate report due to a server error." });
 		}
 	} finally {
 		if (browser) {
-			await browser.close();
+			try {
+				await browser.close();
+			} catch (closeError) {
+				console.error("Error closing browser:", closeError);
+			}
 		}
 	}
 };
