@@ -12,8 +12,20 @@ import printJobsRouter from "./routes/print-jobs.routes.js";
 
 const app = express();
 
-app.use(cors({ origin: ["http://localhost:3000", "https://pims-client.vercel.app"], credentials: true }));
-app.options("*", cors());
+const whitelist = ["http://localhost:3000", "https://pims-client.vercel.app"];
+
+const corsOptions = {
+	origin: function (origin, callback) {
+		if (whitelist.indexOf(origin) !== -1 || !origin) {
+			callback(null, true);
+		} else {
+			callback(new Error("Not allowed by CORS"));
+		}
+	},
+	credentials: true,
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
