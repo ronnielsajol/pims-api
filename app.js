@@ -12,6 +12,8 @@ import printJobsRouter from "./routes/print-jobs.routes.js";
 
 const app = express();
 
+app.set("trust proxy", 1);
+
 const whitelist = ["http://localhost:3000", "https://pims-client.vercel.app"];
 
 const corsOptions = {

@@ -64,4 +64,5 @@ typings/
 migrations/
 .vercel
 .env*.local
+ecosystem.config.js
 ronniel_s.pem
