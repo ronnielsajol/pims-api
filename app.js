@@ -13,7 +13,6 @@ import printJobsRouter from "./routes/print-jobs.routes.js";
 const app = express();
 
 app.use(cors({ origin: ["http://localhost:3000", "https://pims-client.vercel.app"], credentials: true }));
-app.options("*", cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
