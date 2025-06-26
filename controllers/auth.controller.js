@@ -1,6 +1,6 @@
 import { db } from "../database/supabase.js";
 import { Users } from "../models/users.model.js";
-import { JWT_EXPIRES_IN, JWT_SECRET, NODE_ENV } from "../config/env.js";
+import { JWT_EXPIRES_IN, JWT_SECRET } from "../config/env.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { eq } from "drizzle-orm";
@@ -36,7 +36,7 @@ export const signUp = async (req, res, next) => {
 			httpOnly: true,
 			expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // Set an expiration (e.g., 1 day)
 			secure: true,
-			sameSite: "lax",
+			sameSite: "none",
 		};
 
 		res.cookie("token", token, cookieOptions);
@@ -79,7 +79,7 @@ export const signIn = async (req, res, next) => {
 			httpOnly: true,
 			expires: new Date(Date.now() + 24 * 60 * 60 * 1000 * 7), // e.g., 7 days
 			secure: true,
-			sameSite: "lax",
+			sameSite: "none",
 		};
 		res.cookie("token", token, cookieOptions);
 
@@ -99,7 +99,7 @@ export const signOut = (req, res) => {
 	res.clearCookie("token", {
 		httpOnly: true,
 		secure: true,
-		sameSite: "lax",
+		sameSite: "none",
 		path: "/",
 	});
 

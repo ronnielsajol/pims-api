@@ -14,7 +14,11 @@ const app = express();
 
 app.set("trust proxy", 1);
 
-const whitelist = ["http://localhost:3000", "https://pims-client.vercel.app"];
+const whitelist = [
+	"http://localhost:3000",
+	"https://pims-client.vercel.app",
+	"https://pims-client-git-desktop-httponly-ronniel-sajols-projects.vercel.app",
+];
 
 const corsOptions = {
 	origin: function (origin, callback) {
