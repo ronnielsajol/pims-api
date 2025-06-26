@@ -778,15 +778,15 @@ export const generateReport = async (req, res) => {
 			headless: "new",
 			args: [
 				"--no-sandbox",
-				"--disable-setuid-sandbox",
+				"--disable-setuid-sandbox", //comment these arguments if you are running on a local machine starting from here
 				"--disable-dev-shm-usage",
 				"--disable-accelerated-2d-canvas",
 				"--no-first-run",
 				"--no-zygote",
-				"--single-process", // This can help with memory issues
+				"--single-process",
 				"--disable-gpu",
 				"--disable-web-security",
-				"--disable-features=VizDisplayCompositor",
+				"--disable-features=VizDisplayCompositor", // End of arguments to comment out if running locally
 			],
 		};
 
@@ -814,18 +814,10 @@ export const generateReport = async (req, res) => {
 			"Content-Disposition": `attachment; filename="${filename}"`,
 			"Content-Length": pdfBuffer.length,
 		});
-
-		// Send the raw buffer and end the response
 		res.end(pdfBuffer);
 	} catch (error) {
 		console.error("Error generating PDF report with Puppeteer:", error);
 
-		if (error.message.includes("Failed to launch the browser process")) {
-			console.error("Browser launch failed. This might be due to missing system dependencies.");
-			console.error("Run: sudo apt-get install -y chromium-browser");
-			console.error("Or install the required dependencies listed in the Puppeteer troubleshooting guide.");
-		}
-		// Ensure we don't try to send headers twice if an error occurs after they're partially sent
 		if (!res.headersSent) {
 			res.status(500).json({ message: "Failed to generate report due to a server error." });
 		}

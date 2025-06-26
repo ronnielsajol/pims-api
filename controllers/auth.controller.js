@@ -15,16 +15,13 @@ export const signUp = async (req, res, next) => {
 			}
 		}
 
-		// Check if the user already exists
 		const existingUser = await db.select().from(Users).where(eq(Users.email, email));
 		if (existingUser.length > 0) {
 			return res.status(409).json({ success: false, message: "User already exists" });
 		}
 
-		// Hash the password before storing
 		const hashedPassword = await bcrypt.hash(password, 10);
 
-		// Insert new user and return the inserted row
 		const [newUser] = await db
 			.insert(Users)
 			.values({ name, email, password: hashedPassword, role: role || "staff" })
@@ -35,10 +32,20 @@ export const signUp = async (req, res, next) => {
 			expiresIn: JWT_EXPIRES_IN,
 		});
 
+		const cookieOptions = {
+			httpOnly: true,
+			expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // Set an expiration (e.g., 1 day)
+			secure: true,
+			sameSite: "none",
+		};
+
+		res.cookie("token", token, cookieOptions);
+		const { password: _, ...userToReturn } = newUser;
+
 		res.status(201).json({
 			success: true,
 			message: "User registered successfully",
-			data: { token, user: newUser },
+			data: { user: userToReturn },
 		});
 	} catch (error) {
 		next(error);
@@ -68,16 +75,37 @@ export const signIn = async (req, res, next) => {
 			expiresIn: JWT_EXPIRES_IN,
 		});
 
+		const cookieOptions = {
+			httpOnly: true,
+			expires: new Date(Date.now() + 24 * 60 * 60 * 1000 * 7), // e.g., 7 days
+			secure: true,
+			sameSite: "none",
+		};
+		res.cookie("token", token, cookieOptions);
+
+		const { password: _, ...userToReturn } = user;
+
 		res.status(200).json({
 			success: true,
 			message: "Login successful",
-			data: { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } },
+			data: { user: userToReturn },
 		});
 	} catch (error) {
 		next(error);
 	}
 };
 
-export const signOut = async (req, res) => {
+export const signOut = (req, res) => {
+	res.clearCookie("token", {
+		httpOnly: true,
+		secure: true,
+		sameSite: "none",
+		path: "/",
+	});
+
 	res.status(200).json({ success: true, message: "Sign out successful" });
+};
+
+export const getMe = (req, res) => {
+	res.status(200).json({ user: req.user });
 };
