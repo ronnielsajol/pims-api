@@ -804,15 +804,15 @@ export const generateReport = async (req, res) => {
 			headless: "new",
 			args: [
 				"--no-sandbox",
-				// "--disable-setuid-sandbox", //comment these arguments if you are running on a local machine starting from here
-				// "--disable-dev-shm-usage",
-				// "--disable-accelerated-2d-canvas",
-				// "--no-first-run",
-				// "--no-zygote",
-				// "--single-process",
-				// "--disable-gpu",
-				// "--disable-web-security",
-				// "--disable-features=VizDisplayCompositor", // End of arguments to comment out if running locally
+				"--disable-setuid-sandbox", //comment these arguments if you are running on a local machine starting from here
+				"--disable-dev-shm-usage",
+				"--disable-accelerated-2d-canvas",
+				"--no-first-run",
+				"--no-zygote",
+				"--single-process",
+				"--disable-gpu",
+				"--disable-web-security",
+				"--disable-features=VizDisplayCompositor", // End of arguments to comment out if running locally
 			],
 		};
 
