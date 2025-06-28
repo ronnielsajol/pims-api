@@ -22,12 +22,13 @@ export const getAllProperties = async (req, res, next) => {
 		const pageSize = parseInt(req.query.pageSize) || 10;
 		const offset = (page - 1) * pageSize;
 
-		// --- ADMIN VIEW ---
+		let propertiesQuery;
+		let countQuery;
+
+		// --- Role-Based Query Building ---
 		if (user.role === "master_admin" || user.role === "admin") {
 			const custodianUser = aliasedTable(Users, "custodian");
-
-			// Query to get the properties for the current page
-			const propertiesQuery = db
+			propertiesQuery = db
 				.select({
 					...getTableColumns(Properties),
 					assignedTo: custodianUser.name,
@@ -46,28 +47,11 @@ export const getAllProperties = async (req, res, next) => {
 				.limit(pageSize)
 				.offset(offset);
 
-			// Separate, efficient query to get the total count of all properties
-			const countQuery = db.select({ count: sql`count(*)::int` }).from(Properties);
-
-			// Execute both queries in parallel for efficiency
-			const [properties, totalCountResult] = await Promise.all([propertiesQuery, countQuery]);
-
-			const totalCount = totalCountResult[0].count;
-
-			return res.status(200).json({
-				success: true,
-				data: properties,
-				totalCount: totalCount,
-			});
-		}
-
-		// --- CUSTODIAN VIEW ---
-		if (user.role === "property_custodian") {
+			countQuery = db.select({ count: sql`count(*)::int` }).from(Properties);
+		} else if (user.role === "property_custodian") {
 			const custodianUser = aliasedTable(Users, "custodian");
 			const staffUser = aliasedTable(Users, "staff");
-
-			// Query for paginated data
-			const propertiesQuery = db
+			propertiesQuery = db
 				.select({
 					...getTableColumns(Properties),
 					assignedTo: sql`COALESCE(${staffUser.name}, ${custodianUser.name})`,
@@ -88,27 +72,12 @@ export const getAllProperties = async (req, res, next) => {
 				.limit(pageSize)
 				.offset(offset);
 
-			// Count query specific to the custodian's properties
-			const countQuery = db
+			countQuery = db
 				.select({ count: sql`count(*)::int` })
 				.from(CustodianAssignments)
 				.where(eq(CustodianAssignments.custodianId, user.id));
-
-			const [properties, totalCountResult] = await Promise.all([propertiesQuery, countQuery]);
-
-			const totalCount = totalCountResult[0].count;
-
-			return res.status(200).json({
-				success: true,
-				data: properties,
-				totalCount: totalCount,
-			});
-		}
-
-		// --- STAFF VIEW ---
-		if (user.role === "staff") {
-			// Query for paginated data
-			const propertiesQuery = db
+		} else if (user.role === "staff") {
+			propertiesQuery = db
 				.select({ ...getTableColumns(Properties) })
 				.from(StaffAssignments)
 				.where(eq(StaffAssignments.staffId, user.id))
@@ -117,24 +86,30 @@ export const getAllProperties = async (req, res, next) => {
 				.limit(pageSize)
 				.offset(offset);
 
-			// Count query specific to the staff's properties
-			const countQuery = db
+			countQuery = db
 				.select({ count: sql`count(*)::int` })
 				.from(StaffAssignments)
 				.where(eq(StaffAssignments.staffId, user.id));
-
-			const [properties, totalCountResult] = await Promise.all([propertiesQuery, countQuery]);
-
-			const totalCount = totalCountResult[0].count;
-
-			return res.status(200).json({
-				success: true,
-				data: properties,
-				totalCount: totalCount,
-			});
+		} else {
+			return res.status(403).json({ success: false, message: "Forbidden" });
 		}
 
-		return res.status(403).json({ success: false, message: "Forbidden" });
+		// Execute both queries in parallel for efficiency
+		const [properties, totalCountResult] = await Promise.all([propertiesQuery, countQuery]);
+
+		const totalCount = totalCountResult[0].count;
+		const pageCount = Math.ceil(totalCount / pageSize);
+
+		return res.status(200).json({
+			success: true,
+			data: properties,
+			meta: {
+				page,
+				pageSize,
+				pageCount,
+				totalCount,
+			},
+		});
 	} catch (error) {
 		next(error);
 	}
