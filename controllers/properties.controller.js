@@ -7,7 +7,6 @@ import { CustodianAssignments } from "../models/custodian-assignments.model.js";
 import { ReassignmentRequests } from "../models/reassignment-requests.model.js";
 import { StaffAssignments } from "../models/staff-assignments.model.js";
 import { PropertyDetails } from "../models/property-details.model.js";
-import fs from "fs/promises";
 import { fileURLToPath } from "url";
 import path from "path";
 import puppeteer from "puppeteer";
@@ -17,17 +16,20 @@ export const getAllProperties = async (req, res, next) => {
 	try {
 		const user = req.user;
 
-		// --- ADMIN VIEW  ---
-		// Shows the property and the CUSTODIAN it is assigned to.
+		// --- Pagination Logic ---
+		// Get page and pageSize from query params, with sane defaults.
+		const page = parseInt(req.query.page) || 1;
+		const pageSize = parseInt(req.query.pageSize) || 10;
+		const offset = (page - 1) * pageSize;
+
+		// --- ADMIN VIEW ---
 		if (user.role === "master_admin" || user.role === "admin") {
-			// 1. Correctly define the alias for the Users table BEFORE the query
 			const custodianUser = aliasedTable(Users, "custodian");
 
-			const properties = await db
+			// Query to get the properties for the current page
+			const propertiesQuery = db
 				.select({
-					// Select all columns from the Properties table
 					...getTableColumns(Properties),
-					// 2. Use the alias to select the custodian's name
 					assignedTo: custodianUser.name,
 					assignedDepartment: CustodianAssignments.assigned_department,
 					reassignmentStatus: ReassignmentRequests.status,
@@ -35,15 +37,28 @@ export const getAllProperties = async (req, res, next) => {
 				})
 				.from(Properties)
 				.leftJoin(CustodianAssignments, eq(Properties.id, CustodianAssignments.propertyId))
-				// 3. Use the alias in the join condition
 				.leftJoin(custodianUser, eq(CustodianAssignments.custodianId, custodianUser.id))
 				.leftJoin(
 					ReassignmentRequests,
 					and(eq(Properties.id, ReassignmentRequests.propertyId), eq(ReassignmentRequests.status, "pending"))
 				)
-				.orderBy(Properties.id);
+				.orderBy(Properties.id)
+				.limit(pageSize)
+				.offset(offset);
 
-			return res.status(200).json({ success: true, data: properties });
+			// Separate, efficient query to get the total count of all properties
+			const countQuery = db.select({ count: sql`count(*)::int` }).from(Properties);
+
+			// Execute both queries in parallel for efficiency
+			const [properties, totalCountResult] = await Promise.all([propertiesQuery, countQuery]);
+
+			const totalCount = totalCountResult[0].count;
+
+			return res.status(200).json({
+				success: true,
+				data: properties,
+				totalCount: totalCount,
+			});
 		}
 
 		// --- CUSTODIAN VIEW ---
@@ -51,7 +66,8 @@ export const getAllProperties = async (req, res, next) => {
 			const custodianUser = aliasedTable(Users, "custodian");
 			const staffUser = aliasedTable(Users, "staff");
 
-			const properties = await db
+			// Query for paginated data
+			const propertiesQuery = db
 				.select({
 					...getTableColumns(Properties),
 					assignedTo: sql`COALESCE(${staffUser.name}, ${custodianUser.name})`,
@@ -67,20 +83,55 @@ export const getAllProperties = async (req, res, next) => {
 				.leftJoin(
 					ReassignmentRequests,
 					and(eq(Properties.id, ReassignmentRequests.propertyId), eq(ReassignmentRequests.status, "pending"))
-				);
+				)
+				.orderBy(Properties.id)
+				.limit(pageSize)
+				.offset(offset);
 
-			return res.status(200).json({ success: true, data: properties });
+			// Count query specific to the custodian's properties
+			const countQuery = db
+				.select({ count: sql`count(*)::int` })
+				.from(CustodianAssignments)
+				.where(eq(CustodianAssignments.custodianId, user.id));
+
+			const [properties, totalCountResult] = await Promise.all([propertiesQuery, countQuery]);
+
+			const totalCount = totalCountResult[0].count;
+
+			return res.status(200).json({
+				success: true,
+				data: properties,
+				totalCount: totalCount,
+			});
 		}
 
+		// --- STAFF VIEW ---
 		if (user.role === "staff") {
-			const properties = await db
-				.select({
-					...getTableColumns(Properties),
-				})
+			// Query for paginated data
+			const propertiesQuery = db
+				.select({ ...getTableColumns(Properties) })
 				.from(StaffAssignments)
 				.where(eq(StaffAssignments.staffId, user.id))
-				.innerJoin(Properties, eq(StaffAssignments.propertyId, Properties.id));
-			return res.status(200).json({ success: true, data: properties });
+				.innerJoin(Properties, eq(StaffAssignments.propertyId, Properties.id))
+				.orderBy(Properties.id)
+				.limit(pageSize)
+				.offset(offset);
+
+			// Count query specific to the staff's properties
+			const countQuery = db
+				.select({ count: sql`count(*)::int` })
+				.from(StaffAssignments)
+				.where(eq(StaffAssignments.staffId, user.id));
+
+			const [properties, totalCountResult] = await Promise.all([propertiesQuery, countQuery]);
+
+			const totalCount = totalCountResult[0].count;
+
+			return res.status(200).json({
+				success: true,
+				data: properties,
+				totalCount: totalCount,
+			});
 		}
 
 		return res.status(403).json({ success: false, message: "Forbidden" });

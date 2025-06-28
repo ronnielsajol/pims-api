@@ -31,7 +31,7 @@ export const getUsers = async (req, res, next) => {
 
 		// Build query
 		let query = db
-			.select({ id: Users.id, name: Users.name, email: Users.email, role: Users.role })
+			.select({ id: Users.id, name: Users.name, email: Users.email, role: Users.role, department: Users.department })
 			.from(Users)
 			.where(inArray(Users.role, allowedRoles))
 			.orderBy(Users.id);

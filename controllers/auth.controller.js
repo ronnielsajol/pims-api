@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 
 export const signUp = async (req, res, next) => {
 	try {
-		const { name, email, password, role } = req.body;
+		const { name, email, password, department, role } = req.body;
 
 		if (role && role !== "staff") {
 			if (!req.user || req.user.role !== "master_admin") {
@@ -24,7 +24,7 @@ export const signUp = async (req, res, next) => {
 
 		const [newUser] = await db
 			.insert(Users)
-			.values({ name, email, password: hashedPassword, role: role || "staff" })
+			.values({ name, email, password: hashedPassword, department, role: role || "staff" })
 			.returning();
 
 		// Generate JWT token
@@ -34,7 +34,7 @@ export const signUp = async (req, res, next) => {
 
 		const cookieOptions = {
 			httpOnly: true,
-			expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // Set an expiration (e.g., 1 day)
+			expires: new Date(Date.now() + 24 * 60 * 60 * 1000),
 			secure: true,
 			sameSite: "none",
 		};
