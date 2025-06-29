@@ -2,11 +2,19 @@ import { Router } from "express";
 
 import authorize from "../middleware/auth.middleware.js";
 import checkRole from "../middleware/checkRole.middleware.js";
-import { getUserById, getUsers } from "../controllers/user.controller.js";
+import { deleteUser, getUserById, getUsers, updateUser } from "../controllers/user.controller.js";
 
 const userRouter = Router();
 
-// GET routes
-userRouter.get("/", authorize, checkRole(["property_custodian", "admin", "master_admin"]), getUsers);
-userRouter.get("/:id", authorize, checkRole(["admin", "master_admin"]), getUserById);
+// This middleware will protect all routes in this file
+userRouter.use(authorize);
+
+userRouter.get("/", checkRole(["property_custodian", "admin", "master_admin"]), getUsers);
+
+userRouter
+	.route("/:id")
+	.get(checkRole(["admin", "master_admin"]), getUserById)
+	.patch(checkRole(["master_admin", "admin"]), updateUser)
+	.delete(checkRole(["master_admin"]), deleteUser);
+
 export default userRouter;
