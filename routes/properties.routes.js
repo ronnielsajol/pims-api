@@ -15,6 +15,7 @@ import {
 	updatePropertyDetails,
 	generateReport,
 	previewReportTemplate,
+	getPendingReassignmentsCount,
 } from "../controllers/properties.controller.js";
 import authorize from "../middleware/auth.middleware.js";
 import checkRole from "../middleware/checkRole.middleware.js";
@@ -80,6 +81,13 @@ propertiesRouter.delete("/:id", checkRole(["admin", "master_admin"]), deleteProp
 // Special route for scanner - consider namespacing it more, e.g., /scan/property/:id
 // But keeping it as is for now. Placed here as it's highly specific.
 propertiesRouter.get("/scan/:id", getPropertyByScanner); // Assuming scanner has its own auth method outside of standard user roles
+
+propertiesRouter.get(
+	"/reassignments/pending/count",
+	authorize,
+	checkRole(["master_admin"]),
+	getPendingReassignmentsCount
+);
 
 propertiesRouter.get("/reassignments/pending", authorize, checkRole(["master_admin"]), getPendingReassignments);
 propertiesRouter.post("/reassignments/review", authorize, checkRole(["master_admin"]), reviewReassignmentRequest);

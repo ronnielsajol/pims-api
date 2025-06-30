@@ -17,7 +17,6 @@ export const getAllProperties = async (req, res, next) => {
 		const user = req.user;
 
 		// --- Pagination Logic ---
-		// Get page and pageSize from query params, with sane defaults.
 		const page = parseInt(req.query.page) || 1;
 		const pageSize = parseInt(req.query.pageSize) || 10;
 		const offset = (page - 1) * pageSize;
@@ -28,13 +27,14 @@ export const getAllProperties = async (req, res, next) => {
 		// --- Role-Based Query Building ---
 		if (user.role === "master_admin" || user.role === "admin") {
 			const custodianUser = aliasedTable(Users, "custodian");
+
 			propertiesQuery = db
 				.select({
 					...getTableColumns(Properties),
 					assignedTo: custodianUser.name,
 					assignedDepartment: CustodianAssignments.assigned_department,
 					reassignmentStatus: ReassignmentRequests.status,
-					totalValue: sql`CAST(properties.quantity AS numeric) * CAST(properties.value AS numeric)`,
+					totalValue: sql`COALESCE(CAST(${Properties.quantity} AS numeric), 0) * COALESCE(CAST(${Properties.value} AS numeric), 0)`,
 				})
 				.from(Properties)
 				.leftJoin(CustodianAssignments, eq(Properties.id, CustodianAssignments.propertyId))
@@ -47,10 +47,11 @@ export const getAllProperties = async (req, res, next) => {
 				.limit(pageSize)
 				.offset(offset);
 
-			countQuery = db.select({ count: sql`count(*)::int` }).from(Properties);
+			countQuery = db.select({ count: sql`count(*)` }).from(Properties);
 		} else if (user.role === "property_custodian") {
 			const custodianUser = aliasedTable(Users, "custodian");
 			const staffUser = aliasedTable(Users, "staff");
+
 			propertiesQuery = db
 				.select({
 					...getTableColumns(Properties),
@@ -73,7 +74,7 @@ export const getAllProperties = async (req, res, next) => {
 				.offset(offset);
 
 			countQuery = db
-				.select({ count: sql`count(*)::int` })
+				.select({ count: sql`count(*)` })
 				.from(CustodianAssignments)
 				.where(eq(CustodianAssignments.custodianId, user.id));
 		} else if (user.role === "staff") {
@@ -87,7 +88,7 @@ export const getAllProperties = async (req, res, next) => {
 				.offset(offset);
 
 			countQuery = db
-				.select({ count: sql`count(*)::int` })
+				.select({ count: sql`count(*)` })
 				.from(StaffAssignments)
 				.where(eq(StaffAssignments.staffId, user.id));
 		} else {
@@ -97,7 +98,7 @@ export const getAllProperties = async (req, res, next) => {
 		// Execute both queries in parallel for efficiency
 		const [properties, totalCountResult] = await Promise.all([propertiesQuery, countQuery]);
 
-		const totalCount = totalCountResult[0].count;
+		const totalCount = parseInt(totalCountResult[0].count) || 0;
 		const pageCount = Math.ceil(totalCount / pageSize);
 
 		return res.status(200).json({
@@ -456,7 +457,6 @@ export const assignOrReassignProperty = async (req, res, next) => {
 
 export const getPendingReassignments = async (req, res, next) => {
 	try {
-		// We join all tables to get a descriptive response
 		const fromStaff = aliasedTable(Users, "fromStaff");
 		const toStaff = aliasedTable(Users, "toStaff");
 		const custodian = aliasedTable(Users, "custodian");
@@ -483,8 +483,21 @@ export const getPendingReassignments = async (req, res, next) => {
 		next(error);
 	}
 };
+export const getPendingReassignmentsCount = async (req, res, next) => {
+	try {
+		const result = await db
+			.select({ count: sql`count(*)::int` })
+			.from(ReassignmentRequests)
+			.where(eq(ReassignmentRequests.status, "pending"));
 
-// 2. Controller to approve or deny a request
+		const count = result[0].count;
+
+		res.status(200).json({ success: true, count: count });
+	} catch (error) {
+		next(error);
+	}
+};
+
 export const reviewReassignmentRequest = async (req, res, next) => {
 	const { requestId, newStatus } = req.body; // newStatus should be 'approved' or 'denied'
 	const masterAdminId = req.user.id;
