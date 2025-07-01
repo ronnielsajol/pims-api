@@ -137,6 +137,7 @@ export const addProperty = async (req, res, next) => {
 					value: property.value,
 					serialNo: property.serialNo || null,
 					location_detail: property.location_detail || null,
+					modelNo: property.modelNo || null,
 				})
 				.returning();
 
@@ -320,6 +321,7 @@ export const updatePropertyDetails = async (req, res, next) => {
 			"invoiceDate",
 			"invoiceNo",
 			"duration",
+			"modelNo",
 		];
 
 		for (const field of allowedFields) {

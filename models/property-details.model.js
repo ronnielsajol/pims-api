@@ -20,6 +20,7 @@ export const PropertyDetails = pgTable("property_details", {
 	poNo: varchar("po_no", { length: 255 }), // "PO. Number"
 	invoiceDate: date("invoice_date"),
 	invoiceNo: varchar("invoice_no", { length: 255 }),
+	modelNo: varchar("model_no", { length: 255 }),
 
 	// Timestamps for tracking changes to these details
 	createdAt: timestamp("created_at").defaultNow().notNull(),

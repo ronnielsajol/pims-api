@@ -1,8 +1,10 @@
 import { db } from "../database/supabase.js";
 import { PrintJobs } from "../models/print-jobs.model.js";
 import { Properties } from "../models/properties.model.js";
-import { eq, and, asc, desc } from "drizzle-orm";
+import { eq, and, asc, desc, aliasedTable } from "drizzle-orm";
 import { Users } from "../models/users.model.js";
+import { PropertyDetails } from "../models/property-details.model.js";
+import { CustodianAssignments } from "../models/custodian-assignments.model.js";
 
 /**
  * @desc    Create a new print job for a property
@@ -75,13 +77,30 @@ export const getNextPrintJob = async (req, res) => {
 			return res.status(204).send();
 		}
 
-		const propertyData = await db.select().from(Properties).where(eq(Properties.id, job.propertyId));
+		const custodianUser = aliasedTable(Users, "custodian");
 
-		if (propertyData.length === 0) {
+		const propertyDataResult = await db
+			.select({
+				serialNo: Properties.serialNo,
+				propertyNo: Properties.propertyNo,
+				description: Properties.description,
+				acquisitionDate: PropertyDetails.acquisitionDate,
+				assignedCustodian: custodianUser.name,
+				modelNo: PropertyDetails.modelNo,
+			})
+			.from(Properties)
+			.where(eq(Properties.id, job.propertyId))
+			.leftJoin(PropertyDetails, eq(Properties.id, PropertyDetails.propertyId))
+			.leftJoin(CustodianAssignments, eq(Properties.id, CustodianAssignments.propertyId))
+			.leftJoin(custodianUser, eq(CustodianAssignments.custodianId, custodianUser.id))
+			.limit(1);
+
+		if (propertyDataResult.length === 0) {
 			return res.status(404).json({ message: "Property for the claimed job not found." });
 		}
 
-		res.status(200).json(propertyData[0]);
+		// Send the customized JSON object to the ESP32
+		res.status(200).json(propertyDataResult[0]);
 	} catch (error) {
 		console.error("Error fetching next print job:", error);
 		res.status(500).json({ message: "Server error while fetching print job." });
@@ -95,20 +114,29 @@ export const getNextPrintJob = async (req, res) => {
  */
 export const getAllPrintJobs = async (req, res) => {
 	try {
-		// Fetch all jobs, joining with Properties and Users tables to get readable data
+		// Create an alias for the Users table to specifically get the custodian's name
+		const custodianUser = aliasedTable(Users, "custodian");
+
+		// Fetch all jobs, joining with all necessary tables
 		const allJobs = await db
 			.select({
 				jobId: PrintJobs.id,
 				status: PrintJobs.status,
 				propertyNo: Properties.propertyNo,
 				propertyDescription: Properties.description,
-				requestedByName: Users.name,
+				requestedByName: Users.name, // Name of the user who requested the print
 				jobCreatedAt: PrintJobs.createdAt,
 				jobClaimedAt: PrintJobs.claimedAt,
+				// --- NEWLY ADDED FIELDS ---
+				acquisitionDate: PropertyDetails.acquisitionDate,
+				assignedCustodian: custodianUser.name, // Name of the custodian assigned to the property
 			})
 			.from(PrintJobs)
 			.leftJoin(Properties, eq(PrintJobs.propertyId, Properties.id))
-			.leftJoin(Users, eq(PrintJobs.requestedBy, Users.id))
+			.leftJoin(Users, eq(PrintJobs.requestedBy, Users.id)) // Join for the requester
+			.leftJoin(PropertyDetails, eq(PrintJobs.propertyId, PropertyDetails.propertyId)) // Join to get details
+			.leftJoin(CustodianAssignments, eq(PrintJobs.propertyId, CustodianAssignments.propertyId)) // Join to find the custodian assignment
+			.leftJoin(custodianUser, eq(CustodianAssignments.custodianId, custodianUser.id)) // Join to get the custodian's name
 			.orderBy(desc(PrintJobs.createdAt)); // Order by most recent first
 
 		res.status(200).json(allJobs);
