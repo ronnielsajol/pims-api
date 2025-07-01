@@ -25,7 +25,7 @@ export const getAllProperties = async (req, res, next) => {
 		let countQuery;
 
 		// --- Role-Based Query Building ---
-		if (user.role === "master_admin" || user.role === "admin") {
+		if (user.role === "master_admin" || user.role === "admin" || user.role === "developer") {
 			const custodianUser = aliasedTable(Users, "custodian");
 
 			propertiesQuery = db

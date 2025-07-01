@@ -9,6 +9,7 @@ import errorMiddleware from "./middleware/error.middleware.js";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import printJobsRouter from "./routes/print-jobs.routes.js";
+import displayJobsRouter from "./routes/display-jobs.routes.js";
 
 const app = express();
 
@@ -40,6 +41,7 @@ app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/properties", propertiesRouter);
 app.use("/api/v1/print-jobs", printJobsRouter);
+app.use("/api/v1/display-jobs", displayJobsRouter);
 
 app.use(errorMiddleware);
 
